@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { CheckCircle2, Circle, Loader2, Clock3, Settings, X } from 'lucide-react';
+import { ShieldAlert, Fingerprint, Lock, CheckCircle2, ChevronRight, X, AlertTriangle, Clock3, Circle, Settings, Loader2, AlertCircle } from 'lucide-react';
+import heroBg from './assets/hero.png';
 import './App.css';
 
 function formatBytes(bytes) {
@@ -161,7 +162,7 @@ export default function App() {
     setActivating(true);
     setActivationError('');
     try {
-      const res = await fetch('http://localhost:3001/api/activate', {
+      const res = await fetch('https://filelocker-license-server.onrender.com/api/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenseKey: licenseKeyInput, hardwareId })
@@ -226,33 +227,74 @@ export default function App() {
 
   if (licenseTier !== 'PRO') {
     return (
-      <div className="bg-[#FBFBFC] min-h-screen flex items-center justify-center p-4 antialiased selection:bg-[#0073bb] selection:text-white">
-        <div className="bg-white border border-[#EAEAEA] rounded-[8px] w-full max-w-[420px] p-10 flex flex-col items-center text-center shadow-xl">
-          <div className="mb-6 flex justify-center">
-            <img src="/filelocker-logo-main.svg" alt="FileLocker" className="h-[40px] w-auto object-contain" />
-          </div>
-          <h2 className="text-[22px] font-bold text-gray-900 mb-2 tracking-tight">Software Activation</h2>
-          <p className="text-[13px] text-gray-500 mb-8 leading-relaxed">Please enter your License Key to unlock the application for this machine.</p>
+      <div className="flex min-h-screen bg-white font-sans text-gray-900 overflow-hidden w-full">
+        {/* Left Side: Brand Panel */}
+        <div className="hidden md:flex flex-col justify-between w-5/12 p-12 lg:p-16 relative overflow-hidden bg-[#0F1629]">
           
-          <div className="w-full text-left mb-4">
-            <label className="block text-[12px] font-bold text-gray-700 mb-2 uppercase tracking-wider">License Key</label>
-            <input type="text" value={licenseKeyInput} onChange={(e) => setLicenseKeyInput(e.target.value)} placeholder="e.g. PRO-KEY-123" className="w-full px-4 py-2.5 text-[14px] bg-white border border-[#aab7b8] rounded-[4px] text-gray-900 focus:outline-none focus:border-[#0073bb] focus:shadow-[0_0_0_2px_#0073bb33] transition-all placeholder-gray-400 font-mono" />
+          {/* Global Hero Image Background */}
+          <div className="absolute inset-0 z-0">
+            <img src={heroBg} alt="" className="w-full h-full object-cover opacity-80" />
           </div>
           
-          {activationError && (
-            <div className="w-full p-3 bg-red-50 text-red-600 text-[13px] font-medium rounded-[4px] border border-red-100 mb-4 flex items-center">
-              <svg className="w-4 h-4 mr-2 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-              {activationError}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0F1629] via-transparent to-transparent z-0 opacity-80"></div>
+          
+          <div className="relative z-10">
+            <img src="./filelocker-logo-main-dark.svg" alt="FileLocker Logo" className="h-[36px] w-auto max-w-[200px] object-contain" />
+          </div>
+
+          <div className="relative z-10 mt-16 max-w-md">
+            <p className="text-[13px] font-bold text-[#2563EB] tracking-wider uppercase mb-4">Enterprise Grade Security</p>
+            <h2 className="text-[32px] lg:text-[40px] font-bold text-white leading-tight mb-6">Secure offline file delivery for professionals.</h2>
+            <p className="text-[#94A3B8] text-[16px] lg:text-[18px] leading-relaxed">
+              Your sensitive files, encrypted to military standards and protected completely offline.
+            </p>
+          </div>
+        </div>
+
+        {/* Right Side: Interactive Panel */}
+        <div className="w-full md:w-7/12 flex items-center justify-center p-8 relative">
+          <div className="w-full max-w-[400px]">
+            <div className="mb-10 text-center md:text-left">
+              <h2 className="font-['Space_Grotesk'] text-[32px] font-bold text-gray-900 mb-2 tracking-tight">Software Activation</h2>
+              <p className="text-[15px] text-gray-500">Enter your License Key to unlock the application for this machine.</p>
             </div>
-          )}
-          
-          <button onClick={handleActivate} disabled={activating || !licenseKeyInput || !hardwareId} className="w-full py-2.5 rounded-[4px] bg-[#0073bb] text-white text-[14px] font-bold hover:bg-[#00609a] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] mt-2">
-            {activating ? 'Activating...' : !hardwareId ? 'Loading Hardware ID...' : 'Activate License'}
-          </button>
-          
-          <div className="mt-8 pt-6 border-t border-[#EAEAEA] w-full flex flex-col items-center">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-1">Hardware Fingerprint</p>
-            <p className="text-[12px] text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border border-gray-100">{hardwareId || 'Loading... Please wait'}</p>
+
+            <div className="mb-5">
+              <label className="block text-[13px] font-bold text-gray-700 mb-2">License Key</label>
+              <input 
+                type="text" 
+                value={licenseKeyInput} 
+                onChange={(e) => setLicenseKeyInput(e.target.value)} 
+                placeholder="e.g. PRO-KEY-123" 
+                className="w-full px-4 py-3.5 text-[15px] bg-white border border-gray-300 rounded-[8px] text-gray-900 focus:outline-none focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all placeholder-gray-400 font-mono tracking-wide" 
+              />
+            </div>
+            
+            {activationError && (
+              <div className="w-full p-3 bg-[#FEF2F2] text-[#991B1B] text-[14px] font-medium rounded-[8px] border border-[#FCA5A5] mb-5 flex items-start shadow-sm">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0 mr-3 mt-[1px]"><path d="M12 8V12M12 16H12.01M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {activationError}
+              </div>
+            )}
+            
+            <button 
+              onClick={handleActivate} 
+              disabled={activating || !licenseKeyInput || !hardwareId} 
+              className="w-full py-3.5 rounded-[8px] bg-[#2563EB] text-white text-[15px] font-semibold hover:bg-[#1D4ED8] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] mt-2"
+            >
+              {activating ? 'Activating...' : !hardwareId ? 'Loading Hardware ID...' : 'Activate License'}
+            </button>
+            
+            <div className="mt-6 text-center text-[14px] text-gray-500">
+              Don't have a license?{' '}
+              <a 
+                href="#" 
+                onClick={(e) => { e.preventDefault(); window.electronAPI.openExternal('https://filelockerfolder.netlify.app/register'); }} 
+                className="text-[#2563EB] hover:underline font-semibold"
+              >
+                Get FileLocker Pro
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -265,7 +307,7 @@ export default function App() {
       {/* ── Sidebar ── */}
       <aside className="w-full md:w-80 border-r border-[#EAEAEA] p-10 flex flex-col shrink-0 h-screen bg-[#FBFBFC]">
         <div className="flex items-center mb-16">
-          <img src="/filelocker-logo-main.svg" alt="FileLocker" className="h-[34px] w-auto object-contain" />
+          <img src="./filelocker-logo-main.svg" alt="FileLocker" className="h-[34px] w-auto object-contain" />
         </div>
         
         <div className="text-[11px] uppercase font-bold text-[#A1A1AA] tracking-[0.2em] mb-10">Deployment Pipeline</div>
@@ -320,6 +362,10 @@ export default function App() {
         <button onClick={() => setShowSettings(true)} className="flex items-center gap-3 w-full py-3 px-4 rounded-xl text-[#52525b] hover:bg-[#f2f3f5] hover:text-[#005a9e] transition-colors font-semibold text-[13px] group mt-8">
           <Settings className="w-4 h-4 text-[#a1a1aa] group-hover:text-[#005a9e] transition-colors" />
           White-Label Settings
+        </button>
+        <button onClick={() => { localStorage.removeItem('licenseTier'); setLicenseTier('FREE'); }} className="flex items-center gap-3 w-full py-3 px-4 rounded-xl text-[#52525b] hover:bg-[#f2f3f5] hover:text-red-600 transition-colors font-semibold text-[13px] group mt-2">
+          <svg className="w-4 h-4 text-[#a1a1aa] group-hover:text-red-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+          Sign Out
         </button>
       </aside>
 

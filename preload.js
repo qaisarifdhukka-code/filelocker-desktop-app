@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   getDrives: () => ipcRenderer.invoke('get-drives'),
   getHardwareId: () => ipcRenderer.invoke('get-hardware-id'),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
   provisionDrive: (drive, sourcePath, password, isFolder, autoDelete, hint, branding) =>
     ipcRenderer.invoke('provision-drive', drive, sourcePath, password, isFolder, autoDelete, hint, branding),
   onProvisionProgress: (callback) =>

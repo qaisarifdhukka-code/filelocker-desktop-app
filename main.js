@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fse = require('fs-extra');
@@ -65,6 +65,11 @@ app.on('window-all-closed', () => {
 });
 
 // ─── IPC: Select File ─────────────────────────────────────────────────────────
+
+ipcMain.handle('open-external', async (event, url) => {
+  await shell.openExternal(url);
+});
+
 ipcMain.handle('select-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
