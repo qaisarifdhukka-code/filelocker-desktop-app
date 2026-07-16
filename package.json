@@ -1,9 +1,9 @@
 {
-  "name": "vaultlocker",
+  "name": "filelocker",
   "private": true,
   "version": "1.0.0",
   "description": "USB Vault Encryption Tool",
-  "author": "VaultLocker",
+  "author": "FileLocker",
   "main": "main.js",
   "scripts": {
     "dev:react": "vite --port 5173 --strictPort",
@@ -47,8 +47,8 @@
     "wait-on": "^9.0.10"
   },
   "build": {
-    "appId": "com.vaultlocker.app",
-    "productName": "VaultLocker",
+    "appId": "com.filelocker.app",
+    "productName": "FileLocker",
     "compression": "maximum",
     "files": [
       "dist/**/*",
