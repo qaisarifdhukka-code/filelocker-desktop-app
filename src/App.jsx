@@ -692,7 +692,7 @@ export default function App() {
                   <CheckCircle2 className="w-5 h-5 text-[#1d8102] mr-3 shrink-0 mt-0.5" />
                   <div>
                     <h3 className="text-[14px] font-bold text-[#16191f] mb-1">
-                      Drive Successfully Locked
+                      Files Successfully Locked
                     </h3>
                     <p className="text-[13px] text-[#545b64]">
                       Hand the USB to your client. They only need to open <strong className="text-[#16191f]">Unlock_Vault.html</strong> to access the files.
@@ -701,7 +701,7 @@ export default function App() {
                 </div>
 
                 <button onClick={reset} className="w-full max-w-[200px] py-1.5 px-4 rounded-[2px] bg-white font-bold text-[#16191f] hover:bg-[#f8f8f8] transition-colors border border-[#545b64] shadow-[0_1px_1px_rgba(0,0,0,0.1)] focus:outline-none">
-                  Lock Another Drive
+                  Lock More Files
                 </button>
               </div>
             )}
