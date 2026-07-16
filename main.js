@@ -30,7 +30,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    title: 'VaultLocker',
+    title: 'FileLocker',
     backgroundColor: '#ffffff', // also updated this to white since we are on Light Mode now
     show: false,
     titleBarStyle: 'hidden',
@@ -388,7 +388,7 @@ function generateUnlockPage() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VaultLocker — Unlock</title>
+  <title>FileLocker — Unlock</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -407,7 +407,7 @@ function generateUnlockPage() {
 <body>
   <div class="card">
     <div style="font-size:48px;margin-bottom:16px">🔐</div>
-    <h1>VaultLocker</h1>
+    <h1>FileLocker</h1>
     <p>Enter the password to decrypt and download your file.</p>
     <input type="password" id="pwd" placeholder="Enter password..." />
     <button onclick="unlock()">Unlock Vault</button>
@@ -447,7 +447,7 @@ function generateUnlockPage() {
         const headerBuf = await file.slice(0, 9).arrayBuffer();
         const header    = new Uint8Array(headerBuf);
         for (let i = 0; i < 4; i++) {
-          if (header[i] !== MAGIC[i]) throw new Error('Not a valid VaultLocker file.');
+          if (header[i] !== MAGIC[i]) throw new Error('Not a valid FileLocker file.');
         }
         const version = header[4]; // reserved for future use
         const metaLen = new DataView(headerBuf).getUint32(5, true);
