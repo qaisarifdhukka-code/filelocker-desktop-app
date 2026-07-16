@@ -60,9 +60,11 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [hint, setHint] = useState('');
   const [autoDelete, setAutoDelete] = useState(false);
+  const [hideFileName, setHideFileName] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
+  const [savedPath, setSavedPath] = useState('');
   
   // White Label State (Persisted)
   const [firmName, setFirmName] = useState(localStorage.getItem('wl_firmName') || '');
@@ -115,7 +117,10 @@ export default function App() {
         } else {
           setProgress(data.percent);
           setProgressLabel(data.label);
-          if (data.done) setStep(STEPS.DONE);
+          if (data.done) {
+            if (data.savedPath) setSavedPath(data.savedPath);
+            setStep(STEPS.DONE);
+          }
         }
       });
     }
@@ -192,7 +197,7 @@ export default function App() {
     if (isElectron) {
       // If FREE, force default branding to null
       const activeBranding = licenseTier === 'PRO' && (firmName || logoBase64) ? { firmName, primaryColor, logoBase64 } : null;
-      window.electronAPI.provisionDrive(selectedDrive.letter, selectedSource.path, password, selectedSource.isFolder, autoDelete, hint, activeBranding)
+      window.electronAPI.provisionDrive(selectedDrive.letter, selectedSource.path, password, selectedSource.isFolder, autoDelete, hideFileName, hint, activeBranding)
         .catch(e => setError(e.message));
     } else {
       // Browser demo simulation
@@ -217,6 +222,7 @@ export default function App() {
     setAutoDelete(false);
     setProgress(0);
     setProgressLabel('');
+    setSavedPath('');
     setError('');
     setPasswordError('');
     loadDrives();
@@ -526,15 +532,27 @@ export default function App() {
                   </div>
                 )}
                 {selectedSource && (
-                  <label className="flex items-start gap-2.5 mb-6 cursor-pointer">
-                    <div className="flex items-center h-4 mt-0.5">
-                      <input type="checkbox" checked={autoDelete} onChange={(e) => setAutoDelete(e.target.checked)} className="w-4 h-4 accent-[#0073bb] cursor-pointer" />
-                    </div>
-                    <div>
-                      <p className="text-[13px] text-gray-900 font-medium mb-0.5">Delete original file after locking</p>
-                      <p className="text-[12px] text-gray-600">Only the encrypted vault will remain.</p>
-                    </div>
-                  </label>
+                  <div className="flex flex-col gap-4 mb-6">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <div className="flex items-center h-4 mt-0.5">
+                        <input type="checkbox" checked={autoDelete} onChange={(e) => setAutoDelete(e.target.checked)} className="w-4 h-4 accent-[#0073bb] cursor-pointer" />
+                      </div>
+                      <div>
+                        <p className="text-[13px] text-gray-900 font-medium mb-0.5">Delete original file after locking</p>
+                        <p className="text-[12px] text-gray-600">Only the encrypted vault will remain.</p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <div className="flex items-center h-4 mt-0.5">
+                        <input type="checkbox" checked={hideFileName} onChange={(e) => setHideFileName(e.target.checked)} className="w-4 h-4 accent-[#0073bb] cursor-pointer" />
+                      </div>
+                      <div>
+                        <p className="text-[13px] text-gray-900 font-medium mb-0.5">Hide original file name</p>
+                        <p className="text-[12px] text-gray-600">Renames the vault to "Secure Data" to protect privacy.</p>
+                      </div>
+                    </label>
+                  </div>
                 )}
               </div>
             )}
@@ -688,15 +706,20 @@ export default function App() {
                   Locking Complete
                 </h2>
 
-                <div className="p-4 bg-[#f2f8f3] border border-[#b2d8b2] mb-6 rounded flex items-start">
+                <div className="p-4 bg-[#f2f8f3] border border-[#b2d8b2] mb-6 rounded flex items-start w-full">
                   <CheckCircle2 className="w-5 h-5 text-[#1d8102] mr-3 shrink-0 mt-0.5" />
-                  <div>
+                  <div className="w-full">
                     <h3 className="text-[14px] font-bold text-[#16191f] mb-1">
                       Files Successfully Locked
                     </h3>
                     <p className="text-[13px] text-[#545b64]">
                       Hand the USB to your client. They only need to open <strong className="text-[#16191f]">Unlock_Vault.html</strong> to access the files.
                     </p>
+                    {savedPath && (
+                      <p className="text-[12px] text-[#545b64] mt-3 bg-white/60 p-2 rounded border border-[#b2d8b2]/60 font-mono break-all w-full select-all">
+                        Saved to: <strong className="text-[#16191f]">{savedPath}</strong>
+                      </p>
+                    )}
                   </div>
                 </div>
 

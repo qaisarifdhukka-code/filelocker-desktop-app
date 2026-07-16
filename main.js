@@ -150,9 +150,9 @@ ipcMain.handle('get-hardware-id', async () => {
 });
 
 // ─── IPC: Provision Drive ─────────────────────────────────────────────────────
-ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, password, isFolder, autoDelete, hint, branding) => {
-  const send = (percent, label, done = false, error = null) => {
-    mainWindow.webContents.send('provision-progress', { percent, label, done, error });
+ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding) => {
+  const send = (percent, label, done = false, error = null, savedPath = null) => {
+    mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath });
   };
 
   // Convert password string to buffer so we can zero it after key derivation
@@ -181,10 +181,15 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
 
     // ── 2. Build metadata ─────────────────────────────────────────────────────
     send(8, 'Preparing vault...');
-    const originalName = isFolder
+    const baseOriginalName = isFolder
       ? path.basename(sourcePath) + '.zip'
       : path.basename(sourcePath);
-    const ext = path.extname(originalName).toLowerCase();
+    const ext = path.extname(baseOriginalName).toLowerCase();
+    
+    // Obscure the file name if requested, preserving the original extension
+    const originalName = hideFileName
+      ? (isFolder ? `Secure_Folder.zip` : `Secure_Data${ext}`)
+      : baseOriginalName;
 
     const vaultMeta = {
       originalName,
@@ -223,6 +228,7 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
     const randomId = crypto.randomBytes(4).toString('hex').toUpperCase();
     const vaultFileName = `SecureVault_${randomId}.vault`;
     const vaultPath     = path.join(vaultDir, vaultFileName);
+    let finalPath       = vaultPath;
     const writeStream   = fs.createWriteStream(vaultPath);
 
     // Wait for the stream to successfully open, catching any permission/drive errors
@@ -340,6 +346,7 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
       // Build output filename: "report.pdf" → "report_Secure.html"
       const baseName      = path.basename(originalName, path.extname(originalName));
       const secureHtmlPath = path.join(destRoot, `${baseName}_Secure.html`);
+      finalPath = secureHtmlPath;
       fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
 
       // Clean up the temporary Vault_Data folder — client only needs the HTML
@@ -373,7 +380,7 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
       }
     }
 
-    send(100, 'Done!', true);
+    send(100, 'Done!', true, null, finalPath);
   } catch (err) {
     // Zero the password buffer even on failure
     passwordBuffer.fill(0);
