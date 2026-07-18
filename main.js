@@ -95,6 +95,16 @@ ipcMain.handle('select-folder', async () => {
   return { path: folderPath, name: folderName, size, isFolder: true };
 });
 
+// ─── IPC: Select Custom Destination Folder ────────────────────────────────────
+ipcMain.handle('select-dest-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select Destination Folder'
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths[0];
+});
+
 function estimateFolderSize(folderPath) {
   let total = 0;
   try {
@@ -150,7 +160,7 @@ ipcMain.handle('get-hardware-id', async () => {
 });
 
 // ─── IPC: Provision Drive ─────────────────────────────────────────────────────
-ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding) => {
+ipcMain.handle('provision-drive', async (_event, destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding) => {
   const send = (percent, label, done = false, error = null, savedPath = null) => {
     mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath });
   };
@@ -187,12 +197,25 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
     const ext = path.extname(baseOriginalName).toLowerCase();
     
     // Obscure the file name if requested, preserving the original extension
-    const originalName = hideFileName
-      ? (isFolder ? `Secure_Folder.zip` : `Secure_Data${ext}`)
-      : baseOriginalName;
+    let originalName = baseOriginalName;
+    let encryptedNameHex = undefined;
+
+    if (hideFileName) {
+      originalName = isFolder ? `Secure_Folder.zip` : `Secure_Data${ext}`;
+      
+      // Encrypt the true original name so it can be restored on unlock
+      const nameIv = crypto.randomBytes(12);
+      const nameCipher = crypto.createCipheriv('aes-256-gcm', key, nameIv);
+      const encName = Buffer.concat([nameCipher.update(baseOriginalName, 'utf8'), nameCipher.final()]);
+      const nameTag = nameCipher.getAuthTag();
+      
+      // Store IV(12) + TAG(16) + DATA as hex
+      encryptedNameHex = Buffer.concat([nameIv, nameTag, encName]).toString('hex');
+    }
 
     const vaultMeta = {
       originalName,
+      encryptedName: encryptedNameHex,
       ext,
       isFolder,
       salt: salt.toString('hex'),
@@ -213,11 +236,13 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
     metaLenBuf.writeUInt32LE(metaBuf.length, 0);
 
     // ── 3. Open vault write stream ────────────────────────────────────────────
-    // If the user selects the C: drive, writing to C:\ root will cause an EPERM error.
-    // Instead, seamlessly route C: drive vaults to their Desktop.
-    let destRoot = driveLetter + '\\';
-    if (driveLetter.toUpperCase() === 'C:') {
-      destRoot = path.join(app.getPath('desktop'), 'FileLocker_Vaults');
+    let destRoot = destination;
+    // If destination is just a drive letter like "C:" or "F:"
+    if (destination.length === 2 && destination[1] === ':') {
+      destRoot = destination + '\\';
+      if (destination.toUpperCase() === 'C:') {
+        destRoot = path.join(app.getPath('desktop'), 'FileLocker_Vaults');
+      }
     }
 
     const vaultDir = path.join(destRoot, 'Vault_Data');
@@ -344,8 +369,17 @@ ipcMain.handle('provision-drive', async (_event, driveLetter, sourcePath, passwo
       htmlTemplate = htmlTemplate.replace('</body>', `${injection}\n</body>`);
 
       // Build output filename: "report.pdf" → "report_Secure.html"
-      const baseName      = path.basename(originalName, path.extname(originalName));
-      const secureHtmlPath = path.join(destRoot, `${baseName}_Secure.html`);
+      // If hidden, just use the baseName directly so we don't get "Secure_Data_Secure"
+      const baseName = path.basename(originalName, path.extname(originalName));
+      const desiredName = hideFileName ? baseName : `${baseName}_Secure`;
+      let secureHtmlPath = path.join(destRoot, `${desiredName}.html`);
+      
+      let counter = 1;
+      while (fs.existsSync(secureHtmlPath)) {
+        secureHtmlPath = path.join(destRoot, `${desiredName} (${counter}).html`);
+        counter++;
+      }
+      
       finalPath = secureHtmlPath;
       fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
 
@@ -475,16 +509,45 @@ function generateUnlockPage() {
           pwdKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
         );
 
+        let downloadName = meta.originalName;
+        if (meta.encryptedName) {
+          try {
+            const encNameBuf = hexToBytes(meta.encryptedName);
+            const nameIv = encNameBuf.slice(0, 12);
+            const nameTag = encNameBuf.slice(12, 28);
+            const nameData = encNameBuf.slice(28);
+            const combinedName = new Uint8Array(nameData.byteLength + nameTag.byteLength);
+            combinedName.set(new Uint8Array(nameData), 0);
+            combinedName.set(new Uint8Array(nameTag), nameData.byteLength);
+            const decName = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nameIv }, key, combinedName);
+            downloadName = new TextDecoder().decode(decName);
+          } catch(e) {
+            throw new Error('Invalid password. Please try again.');
+          }
+        }
+
         const dataStart = 9 + metaLen + 8; // skip nonce (stored but not needed — IV is in each chunk)
         const dataSize  = file.size - dataStart;
         let offset      = dataStart;
+        
+        // PRE-FLIGHT CHECK
+        const firstChunkBuf = await file.slice(dataStart, dataStart + Math.min(ENC_CHK, dataSize)).arrayBuffer();
+        if (firstChunkBuf.byteLength >= 28) {
+          const iv       = firstChunkBuf.slice(0, 12);
+          const tag      = firstChunkBuf.slice(12, 28);
+          const data     = firstChunkBuf.slice(28);
+          const combined = new Uint8Array(data.byteLength + tag.byteLength);
+          combined.set(new Uint8Array(data), 0);
+          combined.set(new Uint8Array(tag), data.byteLength);
+          await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, combined);
+        }
 
         let writable;
         let chunks = [];
         const isFallback = !window.showSaveFilePicker;
 
         if (!isFallback) {
-          const saveFh = await showSaveFilePicker({ suggestedName: meta.originalName });
+          const saveFh = await showSaveFilePicker({ suggestedName: downloadName });
           writable = await saveFh.createWritable();
         }
 
@@ -508,7 +571,7 @@ function generateUnlockPage() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = meta.originalName;
+          a.download = downloadName;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -520,7 +583,8 @@ function generateUnlockPage() {
         status.textContent = '✓ File decrypted successfully!';
       } catch (e) {
         const s = document.getElementById('status');
-        s.textContent = '⚠ ' + (e.message.includes('auth') || e.message.includes('operation') ? 'Wrong password or corrupted vault.' : e.message);
+        const msg = e.message || '';
+        s.textContent = '⚠ ' + (e.name === 'OperationError' || msg.includes('auth') || msg.includes('operation') || msg.includes('Invalid password') ? 'Invalid password. Please try again.' : (msg || 'Decryption failed.'));
         s.className = 'err';
       }
     }

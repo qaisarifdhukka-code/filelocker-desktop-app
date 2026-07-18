@@ -60,7 +60,7 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [hint, setHint] = useState('');
   const [autoDelete, setAutoDelete] = useState(false);
-  const [hideFileName, setHideFileName] = useState(false);
+  const [hideFileName, setHideFileName] = useState(true);
   const [passwordError, setPasswordError] = useState('');
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
@@ -126,6 +126,17 @@ export default function App() {
     }
   }, [loadDrives, isElectron]);
 
+  const generateStrongPassword = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let p = "";
+    for (let i = 0; i < 16; i++) {
+      p += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(p);
+    setConfirmPassword(p);
+    setShowPassword(true);
+  };
+
   const handleSelectFile = async () => {
     if (!isElectron) return;
     const result = await window.electronAPI.selectFile();
@@ -136,6 +147,14 @@ export default function App() {
     if (!isElectron) return;
     const result = await window.electronAPI.selectFolder();
     if (result) setSelectedSource(result);
+  };
+
+  const handleSelectDestFolder = async () => {
+    if (!isElectron) return;
+    const result = await window.electronAPI.selectDestFolder();
+    if (result) {
+      setSelectedDrive({ isCustom: true, path: result, name: 'Custom Folder', letter: '', size: '', free: '' });
+    }
   };
 
   const handleLogoUpload = (e) => {
@@ -197,7 +216,8 @@ export default function App() {
     if (isElectron) {
       // If FREE, force default branding to null
       const activeBranding = licenseTier === 'PRO' && (firmName || logoBase64) ? { firmName, primaryColor, logoBase64 } : null;
-      window.electronAPI.provisionDrive(selectedDrive.letter, selectedSource.path, password, selectedSource.isFolder, autoDelete, hideFileName, hint, activeBranding)
+      const destination = selectedDrive.isCustom ? selectedDrive.path : selectedDrive.letter;
+      window.electronAPI.provisionDrive(destination, selectedSource.path, password, selectedSource.isFolder, autoDelete, hideFileName, hint, activeBranding)
         .catch(e => setError(e.message));
     } else {
       // Browser demo simulation
@@ -316,16 +336,16 @@ export default function App() {
           <img src="./filelocker-logo-main.svg" alt="FileLocker" className="h-[34px] w-auto object-contain" />
         </div>
         
-        <div className="text-[11px] uppercase font-bold text-[#A1A1AA] tracking-[0.2em] mb-10">Deployment Pipeline</div>
+        <div className="text-[11px] uppercase font-bold text-[#A1A1AA] tracking-[0.2em] mb-10">Encryption Workflow</div>
         <ul className="flex flex-col gap-8 relative">
           {/* Connecting Line */}
           <div className="absolute top-[12px] bottom-[12px] w-px bg-[#EAEAEA] z-0" style={{ left: '15.5px' }}></div>
           {[
-            { label: 'SELECT DRIVE', desc: 'Choose a destination USB', step: STEPS.SELECT_DRIVE },
-            { label: 'SELECT FILES', desc: 'Files from your computer', step: STEPS.SELECT_SOURCE },
-            { label: 'SET PASSWORD', desc: 'Create vault password', step: STEPS.SET_PASSWORD },
-            { label: 'ENCRYPT', desc: 'Secure the payload', step: STEPS.PROVISION },
-            { label: 'DONE', desc: 'Ready to distribute', step: STEPS.DONE },
+            { label: 'SELECT DESTINATION', desc: 'Choose where to save', step: STEPS.SELECT_DRIVE },
+            { label: 'SELECT FILES', desc: 'Choose files to lock', step: STEPS.SELECT_SOURCE },
+            { label: 'SET PASSWORD', desc: 'Create unlock password', step: STEPS.SET_PASSWORD },
+            { label: 'ENCRYPT', desc: 'Secure the files', step: STEPS.PROVISION },
+            { label: 'DONE', desc: 'Ready to share', step: STEPS.DONE },
           ].map((s, i) => {
             const isActive = step === s.step;
             const isDone = step > s.step;
@@ -367,7 +387,7 @@ export default function App() {
         <div className="flex-1"></div>
         <button onClick={() => setShowSettings(true)} className="flex items-center gap-3 w-full py-3 px-4 rounded-xl text-[#52525b] hover:bg-[#f2f3f5] hover:text-[#005a9e] transition-colors font-semibold text-[13px] group mt-8">
           <Settings className="w-4 h-4 text-[#a1a1aa] group-hover:text-[#005a9e] transition-colors" />
-          White-Label Settings
+          Brand Settings
         </button>
         <button onClick={() => { localStorage.removeItem('licenseTier'); setLicenseTier('FREE'); }} className="flex items-center gap-3 w-full py-3 px-4 rounded-xl text-[#52525b] hover:bg-[#f2f3f5] hover:text-red-600 transition-colors font-semibold text-[13px] group mt-2">
           <svg className="w-4 h-4 text-[#a1a1aa] group-hover:text-red-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
@@ -396,8 +416,8 @@ export default function App() {
             {step === STEPS.SELECT_DRIVE && (
               <div className="flex flex-col h-full">
                 <PageHeader
-                  title="Select USB Drive"
-                  description="Choose the destination USB drive for your secure vault. Your existing files on this drive will not be erased or formatted."
+                  title="Select Destination"
+                  description="Choose where you want to save the locked file."
                 />
                 {!isElectron && (
                   <div className="mb-6 rounded-lg px-4 py-2 text-sm border" style={{ backgroundColor: 'rgba(251, 146, 60, 0.1)', borderColor: 'rgba(251, 146, 60, 0.3)', color: 'rgb(124, 45, 18)' }}>
@@ -461,6 +481,30 @@ export default function App() {
                     </div>
                   )}
 
+                  {selectedDrive?.isCustom ? (
+                    <div className="relative w-[260px] bg-[#f8f8f8] rounded-[2px] p-2 flex items-center border border-[#0073bb] shadow-[0_0_0_1px_#0073bb]">
+                      <div className="absolute top-1 right-2 text-[#0073bb] font-bold text-sm">✓</div>
+                      <div className="w-10 h-10 mr-3 flex-shrink-0 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-[#0073bb]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                      </div>
+                      <div className="flex-1 min-w-0 pr-4">
+                        <h3 className="text-[13px] text-gray-900 font-medium truncate mb-0.5">{selectedDrive.name}</h3>
+                        <p className="text-[12px] text-gray-600 truncate mb-1.5" title={selectedDrive.path}>{selectedDrive.path}</p>
+                        <button onClick={handleSelectDestFolder} className="text-[11px] text-[#0073bb] hover:underline font-medium">Change Folder</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div onClick={handleSelectDestFolder} className={`w-[260px] bg-white rounded-[2px] p-2 border border-[#aab7b8] flex items-center cursor-pointer hover:border-[#545b64] transition-shadow`}>
+                      <div className="w-10 h-10 mr-3 flex-shrink-0 flex items-center justify-center text-gray-500">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-[13px] text-gray-900 truncate mb-1.5">Choose Custom Folder...</h3>
+                        <p className="text-[12px] text-gray-500 truncate">Browse your computer</p>
+                      </div>
+                    </div>
+                  )}
+
                   <div onClick={loadDrives} className={`w-[260px] bg-white rounded-[2px] p-2 border border-[#aab7b8] flex items-center cursor-pointer hover:border-[#545b64] transition-shadow ${loadingDrives ? 'opacity-50 pointer-events-none' : ''}`}>
                     <div className="w-10 h-10 mr-3 flex-shrink-0 flex items-center justify-center text-gray-400">
                       <span className="text-2xl">⟳</span>
@@ -479,7 +523,7 @@ export default function App() {
               <div className="flex flex-col h-full">
                 <PageHeader
                   title="Select Files or Folder"
-                  description={`Choose the files from your computer that you want to securely lock onto ${selectedDrive?.letter}. They will be automatically encrypted.`}
+                  description="Choose the files or folders you want to securely encrypt."
                 />
                 {!selectedSource ? (
                   <div className="flex flex-wrap gap-4 mb-6">
@@ -563,7 +607,12 @@ export default function App() {
                 <PageHeader title="Set Vault Password" description="This password locks the vault. There is no recovery option." />
                 <div className="w-full max-w-[340px] flex flex-col gap-5">
                   <div>
-                    <label className="block text-[13px] font-bold text-gray-900 mb-1.5">Create Password</label>
+                    <div className="flex justify-between items-end mb-1.5">
+                      <label className="block text-[13px] font-bold text-gray-900">Create Password</label>
+                      <button onClick={generateStrongPassword} className="text-[11px] font-bold text-[#0073bb] hover:underline focus:outline-none">
+                        Auto-Generate Password
+                      </button>
+                    </div>
                     <div className="relative">
                       <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" className={`w-full px-3 py-1.5 text-[14px] bg-white border rounded-[2px] transition-shadow focus:outline-none pr-14 ${passwordError ? 'border-[#d13212] focus:border-[#d13212] focus:shadow-[0_0_0_1px_#d13212]' : 'border-[#aab7b8] focus:border-[#0073bb] focus:shadow-[0_0_0_1px_#0073bb]'}`} />
                       <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2 text-[11px] font-bold text-gray-400 hover:text-[#0073bb] uppercase tracking-wider">
@@ -606,7 +655,7 @@ export default function App() {
             {/* ── Step 3: Encrypting (Pipeline UI) ── */}
             {step === STEPS.PROVISION && (
               <div className="flex flex-col h-full max-w-2xl mx-auto w-full pt-4">
-                <PageHeader title="Deploying to USB" description="Please do not remove the USB drive until all pipeline stages are complete." />
+                <PageHeader title="Securing your files" description="Please do not close the app until all pipeline stages are complete." />
 
                 <div className="flex flex-col relative mt-4">
                   {/* Vertical connecting line */}
@@ -713,7 +762,7 @@ export default function App() {
                       Files Successfully Locked
                     </h3>
                     <p className="text-[13px] text-[#545b64]">
-                      Hand the USB to your client. They only need to open <strong className="text-[#16191f]">Unlock_Vault.html</strong> to access the files.
+                      Your files have been securely encrypted. You can now share the secure HTML file via email, cloud storage, or USB.
                     </p>
                     {savedPath && (
                       <p className="text-[12px] text-[#545b64] mt-3 bg-white/60 p-2 rounded border border-[#b2d8b2]/60 font-mono break-all w-full select-all">
@@ -750,7 +799,7 @@ export default function App() {
               )}
               {step === STEPS.SET_PASSWORD && (
                 <button onClick={handleValidatePassword} disabled={!password || !confirmPassword} className="flex items-center justify-center min-w-[120px] py-1.5 px-4 rounded-[4px] bg-[#0073bb] font-medium text-white text-[13px] hover:bg-[#00609a] focus:outline-none focus:ring-2 focus:ring-[#0073bb]/30 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm">
-                  Deploy to USB
+                  Encrypt & Save
                 </button>
               )}
             </div>
@@ -761,49 +810,58 @@ export default function App() {
 
       {/* ── Settings Modal Overlay ── */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-white/70 z-50 flex items-center justify-center p-4 backdrop-blur-md">
           <div className="bg-white rounded-[8px] w-full max-w-[500px] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-gray-200">
-            
             {/* Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-[#FBFBFC]">
               <div>
                 <h2 className="text-[18px] font-bold text-gray-900 flex items-center gap-2">
-                  <span className="bg-[#10B981] text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">Pro</span>
-                  White-Label Settings
+                  Brand Settings
                 </h2>
                 <p className="text-[13px] text-gray-500 mt-1">Configure your firm branding for all future vaults.</p>
               </div>
-              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-900 transition-colors">
+              <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-900 transition-colors focus:outline-none">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             {/* Body */}
-            <div className="p-6 flex flex-col gap-6">
+            <div className="p-6 flex flex-col gap-6 bg-white">
+              {/* Firm Name */}
               <div>
                 <label className="block text-[13px] font-bold text-gray-900 mb-2">Firm Name</label>
-                <input type="text" value={firmName} onChange={(e) => setFirmName(e.target.value)} placeholder="e.g. Smith & Associates" className="w-full px-3 py-2 text-[14px] bg-white border border-[#aab7b8] rounded-[6px] focus:outline-none focus:border-[#0073bb] focus:shadow-[0_0_0_2px_#0073bb33] transition-all" />
+                <input type="text" value={firmName} onChange={(e) => setFirmName(e.target.value)} placeholder="e.g. Smith & Associates" className="w-full px-3 py-2 text-[14px] bg-white border border-[#aab7b8] rounded-[2px] focus:outline-none focus:border-[#0073bb] focus:shadow-[0_0_0_1px_#0073bb] transition-all" />
               </div>
               
-              <div className="flex gap-6">
+              <div className="flex flex-col sm:flex-row gap-6">
                 <div className="flex-1">
-                  <label className="block text-[13px] font-bold text-gray-900 mb-2">Firm Logo (Max 500KB)</label>
-                  <input type="file" accept="image/png, image/jpeg, image/svg+xml" onChange={handleLogoUpload} className="text-[12px] w-full file:mr-3 file:py-1.5 file:px-3 file:rounded-[4px] file:border-0 file:text-[13px] file:font-semibold file:bg-[#f2f3f3] file:text-[#52525b] hover:file:bg-[#e9eaea] cursor-pointer" />
+                  <label className="block text-[13px] font-bold text-gray-900 mb-2">
+                    Firm Logo <span className="text-gray-500 font-normal ml-1">(Max 500KB)</span>
+                  </label>
+                  <div className="relative">
+                    <input type="file" id="logoUpload" accept="image/png, image/jpeg, image/svg+xml" onChange={handleLogoUpload} className="sr-only" />
+                    <label htmlFor="logoUpload" className="flex items-center justify-center w-full px-4 py-2 bg-[#f8f8f8] border border-[#aab7b8] border-dashed rounded-[2px] cursor-pointer hover:border-[#545b64] hover:bg-white transition-all group">
+                      <svg className="w-4 h-4 text-[#545b64] mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                      <span className="text-[13px] font-medium text-[#16191f]">Choose Image</span>
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[13px] font-bold text-gray-900 mb-2">Brand Color</label>
-                  <div className="flex items-center gap-3 h-[36px]">
-                    <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-10 h-10 rounded border border-gray-200 p-0.5 cursor-pointer bg-white" />
-                    <span className="text-[13px] font-mono text-gray-600 font-medium uppercase">{primaryColor}</span>
+                  <div className="flex items-center gap-3 h-[38px] bg-white px-2 py-1 border border-[#aab7b8] rounded-[2px]">
+                    <div className="relative w-6 h-6 rounded-[2px] overflow-hidden border border-[#EAEAEA] shrink-0">
+                      <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="absolute -top-2 -left-2 w-10 h-10 cursor-pointer border-0 p-0" />
+                    </div>
+                    <span className="text-[13px] font-mono text-gray-900 uppercase pr-1">{primaryColor}</span>
                   </div>
                 </div>
               </div>
               
               {logoBase64 && (
-                <div className="p-4 border border-dashed border-gray-300 rounded-[8px] bg-[#FBFBFC] flex flex-col items-center justify-center relative group">
-                   <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Logo Preview</span>
+                <div className="p-4 border border-[#EAEAEA] rounded-[2px] bg-[#f8f8f8] flex flex-col items-center justify-center relative group">
+                   <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-2">Logo Preview</span>
                    <img src={logoBase64} alt="Preview" className="max-h-12 object-contain" />
-                   <button onClick={() => setLogoBase64('')} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button onClick={() => setLogoBase64('')} className="absolute top-2 right-2 text-gray-400 hover:text-[#d13212] transition-colors focus:outline-none">
                      <X className="w-4 h-4" />
                    </button>
                 </div>
@@ -812,8 +870,8 @@ export default function App() {
             
             {/* Footer */}
             <div className="p-6 pt-0 flex justify-end gap-3 bg-white">
-              <button onClick={() => setShowSettings(false)} className="px-5 py-2 rounded-[6px] text-[13px] font-bold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
-              <button onClick={saveSettings} className="px-5 py-2 rounded-[6px] bg-[#0073bb] text-white text-[13px] font-bold hover:bg-[#00609a] transition-colors shadow-sm">Save Settings</button>
+              <button onClick={() => setShowSettings(false)} className="px-5 py-2 rounded-[2px] text-[13px] font-bold text-[#16191f] bg-white border border-[#aab7b8] hover:border-[#545b64] hover:bg-[#f8f8f8] transition-colors focus:outline-none shadow-sm">Cancel</button>
+              <button onClick={saveSettings} className="px-5 py-2 rounded-[2px] bg-[#0073bb] text-white text-[13px] font-bold hover:bg-[#00609a] transition-colors shadow-sm focus:outline-none">Save Settings</button>
             </div>
 
           </div>
