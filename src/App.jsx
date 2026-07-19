@@ -186,7 +186,7 @@ export default function App() {
     setActivating(true);
     setActivationError('');
     try {
-      const res = await fetch('https://filelocker-license-server.onrender.com/api/activate', {
+      const res = await fetch('https://filelocker-license-server.qaisarifdhukka.workers.dev/api/activate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenseKey: licenseKeyInput, hardwareId })
