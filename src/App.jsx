@@ -79,6 +79,10 @@ export default function App() {
   const [activating, setActivating] = useState(false);
   const [hardwareId, setHardwareId] = useState('');
   
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [updatePercent, setUpdatePercent] = useState(0);
+  const [appVersion, setAppVersion] = useState('');
+
   const [error, setError] = useState('');
   const [loadingDrives, setLoadingDrives] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -105,6 +109,9 @@ export default function App() {
       window.electronAPI.getHardwareId()
         .then(setHardwareId)
         .catch(() => setHardwareId('ERROR-LOADING-ID'));
+      window.electronAPI.getVersion()
+        .then(setAppVersion)
+        .catch(() => setAppVersion('0.0.0'));
       loadDrives();
       window.electronAPI.onProvisionProgress((data) => {
         if (data.error) {
@@ -123,6 +130,16 @@ export default function App() {
           }
         }
       });
+      if (window.electronAPI.updater) {
+        window.electronAPI.updater.onUpdaterEvent((event) => {
+          if (event.type === 'download-progress') {
+            setUpdateStatus('downloading');
+            setUpdatePercent(Math.round(event.percent));
+          } else if (event.type === 'update-downloaded') {
+            setUpdateStatus('ready');
+          }
+        });
+      }
     }
   }, [loadDrives, isElectron]);
 
@@ -385,7 +402,25 @@ export default function App() {
         </ul>
         
         <div className="flex-1"></div>
-        <button onClick={() => setShowSettings(true)} className="flex items-center gap-3 w-full py-3 px-4 rounded-xl text-[#52525b] hover:bg-[#f2f3f5] hover:text-[#005a9e] transition-colors font-semibold text-[13px] group mt-8">
+        {/* Updater UI */}
+        {updateStatus === 'downloading' && (
+          <div className="flex flex-col gap-2 w-full p-4 rounded-xl bg-[#f2f3f5] border border-[#EAEAEA] mt-8">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-[#005a9e] animate-spin" />
+              <span className="text-[13px] font-bold text-[#52525b]">Downloading Update...</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+              <div className="bg-[#005a9e] h-1.5 rounded-full transition-all duration-300" style={{ width: `${updatePercent}%` }}></div>
+            </div>
+          </div>
+        )}
+        {updateStatus === 'ready' && (
+          <button onClick={() => window.electronAPI.updater.quitAndInstall()} className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-[#0073bb] text-white hover:bg-[#00609a] transition-colors font-semibold text-[13px] group mt-8 shadow-sm">
+            <AlertCircle className="w-4 h-4 text-white" />
+            Restart to Update
+          </button>
+        )}
+        <button onClick={() => setShowSettings(true)} className={`flex items-center gap-3 w-full py-3 px-4 rounded-xl text-[#52525b] hover:bg-[#f2f3f5] hover:text-[#005a9e] transition-colors font-semibold text-[13px] group ${updateStatus ? 'mt-2' : 'mt-8'}`}>
           <Settings className="w-4 h-4 text-[#a1a1aa] group-hover:text-[#005a9e] transition-colors" />
           Brand Settings
         </button>
@@ -393,6 +428,13 @@ export default function App() {
           <svg className="w-4 h-4 text-[#a1a1aa] group-hover:text-red-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
           Sign Out
         </button>
+        
+        {/* App Version */}
+        {appVersion && (
+          <div className="w-full text-center mt-6">
+            <span className="text-[11px] font-mono text-gray-400">v{appVersion}</span>
+          </div>
+        )}
       </aside>
 
       {/* ── Main Area ── */}

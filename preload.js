@@ -6,9 +6,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDestFolder: () => ipcRenderer.invoke('select-dest-folder'),
   getDrives: () => ipcRenderer.invoke('get-drives'),
   getHardwareId: () => ipcRenderer.invoke('get-hardware-id'),
+  getVersion: () => ipcRenderer.invoke('get-version'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   provisionDrive: (destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding) =>
     ipcRenderer.invoke('provision-drive', destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding),
   onProvisionProgress: (callback) =>
     ipcRenderer.on('provision-progress', (_event, data) => callback(data)),
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
+    onUpdaterEvent: (callback) => ipcRenderer.on('updater-event', (_event, data) => callback(data))
+  }
 });

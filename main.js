@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const fse = require('fs-extra');
 const { exec } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 const crypto = require('crypto');
 const { argon2id } = require('hash-wasm');
 const archiver = require('archiver');
@@ -58,7 +59,30 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+
+  const isDev = process.env.NODE_ENV === 'development';
+  if (!isDev) {
+    autoUpdater.checkForUpdates();
+  }
 });
+
+// ─── Auto-Updater Events ───────────────────────────────────────────────────────
+autoUpdater.on('update-available', (info) => {
+  if (mainWindow) mainWindow.webContents.send('updater-event', { type: 'update-available', info });
+});
+autoUpdater.on('download-progress', (progressObj) => {
+  if (mainWindow) mainWindow.webContents.send('updater-event', { type: 'download-progress', percent: progressObj.percent });
+});
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow) mainWindow.webContents.send('updater-event', { type: 'update-downloaded', info });
+});
+autoUpdater.on('error', (err) => {
+  if (mainWindow) mainWindow.webContents.send('updater-event', { type: 'error', error: err.message });
+});
+
+ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates());
+ipcMain.handle('quit-and-install', () => autoUpdater.quitAndInstall());
+ipcMain.handle('get-version', () => app.getVersion());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
