@@ -121,7 +121,7 @@ function estimateFolderSize(folderPath) {
 // ─── IPC: Get Drives ──────────────────────────────────────────────────────────
 ipcMain.handle('get-drives', async () => {
   return new Promise((resolve) => {
-    const cmd = `powershell -Command "Get-WmiObject Win32_LogicalDisk -Filter 'DriveType=2 OR DriveType=3' | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress"`;
+    const cmd = `powershell -Command "Get-WmiObject Win32_LogicalDisk -Filter 'DriveType=2' | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress"`;
     exec(cmd, (error, stdout) => {
       if (error) return resolve([]);
       try {
