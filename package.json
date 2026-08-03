@@ -51,6 +51,9 @@
     "appId": "com.filelocker.app",
     "productName": "FileLocker",
     "compression": "maximum",
+    "nsis": {
+      "artifactName": "FileLocker-Setup.${ext}"
+    },
     "publish": {
       "provider": "github",
       "owner": "qaisarifdhukka-code",
