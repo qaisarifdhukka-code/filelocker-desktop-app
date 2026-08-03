@@ -121,19 +121,22 @@ function estimateFolderSize(folderPath) {
 // ─── IPC: Get Drives ──────────────────────────────────────────────────────────
 ipcMain.handle('get-drives', async () => {
   return new Promise((resolve) => {
-    const cmd = `powershell -Command "Get-WmiObject Win32_LogicalDisk -Filter 'DriveType=2' | Select-Object DeviceID, VolumeName, Size, FreeSpace | ConvertTo-Json -Compress"`;
+    const cmd = `powershell -Command "Get-WmiObject Win32_LogicalDisk -Filter 'DriveType=2 OR DriveType=3' | Select-Object DeviceID, VolumeName, Size, FreeSpace, DriveType | ConvertTo-Json -Compress"`;
     exec(cmd, (error, stdout) => {
       if (error) return resolve([]);
       try {
         let raw = stdout.trim();
         if (!raw) return resolve([]);
         const parsed = raw.startsWith('[') ? JSON.parse(raw) : [JSON.parse(raw)];
-        const drives = parsed.map(d => ({
-          letter: d.DeviceID,
-          name: d.VolumeName || 'USB Drive',
-          size: d.Size ? Math.round(d.Size / 1024 / 1024 / 1024) + ' GB' : '',
-          free: d.FreeSpace ? Math.round(d.FreeSpace / 1024 / 1024 / 1024) + ' GB free' : '',
-        }));
+        const drives = parsed.map(d => {
+          let defaultName = d.DriveType === 3 ? 'Local Disk' : 'USB Drive';
+          return {
+            letter: d.DeviceID,
+            name: d.VolumeName || defaultName,
+            size: d.Size ? Math.round(d.Size / 1024 / 1024 / 1024) + ' GB' : '',
+            free: d.FreeSpace ? Math.round(d.FreeSpace / 1024 / 1024 / 1024) + ' GB free' : '',
+          };
+        });
         resolve(drives);
       } catch { resolve([]); }
     });
