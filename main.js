@@ -61,8 +61,12 @@ app.whenReady().then(() => {
   });
 
   const isDev = process.env.NODE_ENV === 'development';
-  if (!isDev) {
-    autoUpdater.checkForUpdates();
+  if (!isDev && !process.windowsStore) {
+    try {
+      autoUpdater.checkForUpdates();
+    } catch (e) {
+      console.error('Auto updater error:', e);
+    }
   }
 });
 
@@ -183,6 +187,40 @@ ipcMain.handle('get-hardware-id', async () => {
     } else {
       resolve('UNKNOWN-HARDWARE-ID');
     }
+  });
+});
+
+// ─── IPC: Store License Check ───────────────────────────────────────────────────
+ipcMain.handle('check-store-license', async () => {
+  // If not running in MSIX, return direct mode
+  if (!process.windowsStore) {
+    return { isStoreBuild: false, isActive: false, licenseSource: 'direct' };
+  }
+
+  return new Promise((resolve) => {
+    // If running in MSIX, run the C# helper to check entitlement
+    const checkerPath = app.isPackaged 
+      ? path.join(process.resourcesPath, 'StoreLicenseChecker.exe')
+      : path.join(__dirname, 'StoreLicenseChecker', 'StoreLicenseChecker.exe');
+
+    if (!fs.existsSync(checkerPath)) {
+      if (process.env.NODE_ENV === 'development') {
+        resolve({ isStoreBuild: true, isActive: true, licenseSource: 'microsoft-store', error: 'Mocked (Checker not found)' });
+      } else {
+        resolve({ isStoreBuild: true, isActive: false, licenseSource: 'microsoft-store', error: 'Store License Checker not found' });
+      }
+      return;
+    }
+
+    exec(`"${checkerPath}"`, (error, stdout) => {
+      try {
+        const result = JSON.parse(stdout.trim());
+        result.licenseSource = 'microsoft-store';
+        resolve(result);
+      } catch (err) {
+        resolve({ isStoreBuild: true, isActive: false, licenseSource: 'microsoft-store', error: err.message });
+      }
+    });
   });
 });
 

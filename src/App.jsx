@@ -79,6 +79,9 @@ export default function App() {
   const [activating, setActivating] = useState(false);
   const [hardwareId, setHardwareId] = useState('');
   
+  const [storeCheckDone, setStoreCheckDone] = useState(false);
+  const [storeStatus, setStoreStatus] = useState(null);
+  
   const [updateStatus, setUpdateStatus] = useState(null);
   const [updatePercent, setUpdatePercent] = useState(0);
   const [appVersion, setAppVersion] = useState('');
@@ -106,6 +109,18 @@ export default function App() {
 
   useEffect(() => {
     if (isElectron) {
+      window.electronAPI.checkStoreLicense().then((result) => {
+        if (result.isStoreBuild) {
+          if (result.isActive) {
+            setLicenseTier('PRO');
+            localStorage.setItem('licenseTier', 'PRO');
+          } else {
+            setStoreStatus('inactive');
+          }
+        }
+        setStoreCheckDone(true);
+      });
+
       window.electronAPI.getHardwareId()
         .then(setHardwareId)
         .catch(() => setHardwareId('ERROR-LOADING-ID'));
@@ -140,6 +155,8 @@ export default function App() {
           }
         });
       }
+    } else {
+      setStoreCheckDone(true);
     }
   }, [loadDrives, isElectron]);
 
@@ -268,7 +285,48 @@ export default function App() {
   const pwdStrength = password.length === 0 ? '' : password.length < 8 ? 'Weak' : password.length < 12 ? 'Good' : 'Strong';
   const pwdColor = pwdStrength === 'Strong' ? 'var(--color-vault-success)' : pwdStrength === 'Good' ? '#ffb300' : 'var(--color-vault-danger)';
 
+  if (!storeCheckDone) {
+    return (
+      <div className="flex min-h-screen bg-white items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-[#2563EB] animate-spin" />
+          <p className="text-gray-500 font-medium">Checking license...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (licenseTier !== 'PRO') {
+    if (storeStatus === 'inactive') {
+      return (
+        <div className="flex min-h-screen bg-white font-sans text-gray-900 overflow-hidden w-full">
+          <div className="hidden md:flex flex-col justify-between w-5/12 p-12 lg:p-16 relative overflow-hidden bg-[#0F1629]">
+            <div className="absolute inset-0 z-0">
+              <img src={heroBg} alt="" className="w-full h-full object-cover opacity-80" />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0F1629] via-transparent to-transparent z-0 opacity-80"></div>
+            <div className="relative z-10">
+              <img src="./filelocker-logo-main-dark.svg" alt="FileLocker Logo" className="h-[36px] w-auto max-w-[200px] object-contain" />
+            </div>
+          </div>
+          <div className="w-full md:w-7/12 flex items-center justify-center p-8 relative">
+            <div className="w-full max-w-[400px]">
+              <div className="mb-10 text-center md:text-left">
+                <h2 className="font-['Space_Grotesk'] text-[32px] font-bold text-gray-900 mb-2 tracking-tight">FileLocker isn't activated</h2>
+                <p className="text-[15px] text-gray-500">Purchase FileLocker from the Microsoft Store to unlock the full application.</p>
+              </div>
+              <button 
+                onClick={() => window.electronAPI.openExternal('ms-windows-store://pdp/?productid=YOUR_PRODUCT_ID')} 
+                className="w-full py-3.5 rounded-[8px] bg-[#2563EB] text-white text-[15px] font-semibold hover:bg-[#1D4ED8] transition-all shadow-sm active:scale-[0.99] mt-2"
+              >
+                Get FileLocker from Microsoft Store
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex min-h-screen bg-white font-sans text-gray-900 overflow-hidden w-full">
         {/* Left Side: Brand Panel */}

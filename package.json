@@ -11,7 +11,7 @@
     "dev": "concurrently -k \"npm run dev:react\" \"wait-on http://localhost:5173 && npm run dev:electron\"",
     "build": "vite build",
     "prebuild-unlock": "cd ../unlock-app && npm run build",
-    "dist": "npm run prebuild-unlock && npm run build && node -e \"require('fs').copyFileSync('../unlock-app/dist/index.html', './Unlock_Vault.html')\" && electron-builder",
+    "dist": "npm run prebuild-unlock && npm run build && node -e \"require('fs').copyFileSync('../unlock-app/dist/index.html', './Unlock_Vault.html')\" && cross-env CSC_LINK=test-cert.pfx CSC_KEY_PASSWORD=testpassword electron-builder",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -65,9 +65,20 @@
       "preload.js",
       "Unlock_Vault.html"
     ],
+    "extraResources": [
+      "StoreLicenseChecker/StoreLicenseChecker.exe"
+    ],
     "win": {
-      "target": "nsis",
+      "target": ["nsis", "appx"],
       "icon": "icon.ico"
+    },
+    "appx": {
+      "artifactName": "FileLocker-Test.${ext}",
+      "applicationId": "FileLocker",
+      "identityName": "FileLocker",
+      "publisher": "CN=FileLocker",
+      "publisherDisplayName": "FileLocker",
+      "setBuildNumber": true
     },
     "mac": {
       "target": "dmg"
