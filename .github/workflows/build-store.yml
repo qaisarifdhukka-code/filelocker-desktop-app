@@ -64,7 +64,7 @@ jobs:
       - name: Build MSIX (Electron-Builder)
         run: |
           cd provisioning-app
-          npx electron-builder --win appx
+          npx electron-builder --win appx --publish never
 
       - name: Upload MSIX Artifact
         uses: actions/upload-artifact@v4
