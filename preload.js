@@ -9,8 +9,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkStoreLicense: () => ipcRenderer.invoke('check-store-license'),
   getVersion: () => ipcRenderer.invoke('get-version'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
-  provisionDrive: (destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding) =>
-    ipcRenderer.invoke('provision-drive', destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding),
+  provisionDrive: (destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams) =>
+    ipcRenderer.invoke('provision-drive', destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams),
+  saveOfflineHtml: (vaultPath, originalName, hideFileName, defaultSaveLocation) =>
+    ipcRenderer.invoke('save-offline-html', vaultPath, originalName, hideFileName, defaultSaveLocation),
+  cleanupTempVault: () => ipcRenderer.invoke('cleanup-temp-vault'),
   onProvisionProgress: (callback) =>
     ipcRenderer.on('provision-progress', (_event, data) => callback(data)),
   updater: {
