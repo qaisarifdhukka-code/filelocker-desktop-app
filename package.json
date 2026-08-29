@@ -70,7 +70,7 @@
     ],
     "win": {
       "target": ["nsis", "appx"],
-      "icon": "icon.ico"
+      "icon": "public/AUROQI ICON.png"
     },
     "appx": {
       "artifactName": "AUROQI-Store.${ext}",
