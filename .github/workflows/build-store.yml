@@ -1,0 +1,71 @@
+name: Build Microsoft Store Package (MSIX)
+
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+  push:
+    tags:
+      - 'v*-store' # Triggers on tags like v1.0.0-store
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Desktop App
+        uses: actions/checkout@v4
+        with:
+          path: provisioning-app
+
+      - name: Checkout Unlock App
+        uses: actions/checkout@v4
+        with:
+          repository: qaisarifdhukka-code/filelocker-unlock-app
+          path: unlock-app
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: |
+          cd provisioning-app
+          npm install
+          cd ../unlock-app
+          npm install
+
+      - name: Build Unlock App
+        run: |
+          cd unlock-app
+          npm run build
+          
+      - name: Copy Unlock HTML to Provisioning App
+        run: |
+          copy unlock-app\dist\index.html provisioning-app\Unlock_Vault.html
+
+      - name: Build React Frontend
+        run: |
+          cd provisioning-app
+          npm run build
+
+      - name: Build StoreLicenseChecker (C#)
+        run: |
+          cd provisioning-app\StoreLicenseChecker
+          dotnet publish -c Release -r win-x64 --self-contained true
+
+      - name: Build MSIX (Electron-Builder)
+        run: |
+          cd provisioning-app
+          # Generates a temporary self-signed cert just to allow electron-builder to finish packaging
+          # Microsoft Store will completely strip this and re-sign with their own EV certificate.
+          npx electron-builder --win appx
+        env:
+          # Dummy values to bypass electron-builder strictness. Microsoft replaces these signatures.
+          CSC_LINK: "test-cert.pfx" 
+          CSC_KEY_PASSWORD: "testpassword"
+
+      - name: Upload MSIX Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AUROQI-Store-Package
+          path: provisioning-app/dist/*.appx

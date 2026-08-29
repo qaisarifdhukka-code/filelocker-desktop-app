@@ -19,6 +19,7 @@ let mainWindow;
 const MAGIC = Buffer.from([0x56, 0x4C, 0x4B, 0x54]); // "VLKT"
 const VERSION = 0x01;
 const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
+const SINGLE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100 MB
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -84,12 +85,40 @@ autoUpdater.on('error', (err) => {
   if (mainWindow) mainWindow.webContents.send('updater-event', { type: 'error', error: err.message });
 });
 
-ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates());
+ipcMain.handle('check-for-updates', () => {
+  if (process.windowsStore) {
+    if (mainWindow) mainWindow.webContents.send('updater-event', { type: 'error', error: 'Updates are managed by Microsoft Store.' });
+    return;
+  }
+  autoUpdater.checkForUpdates();
+});
 ipcMain.handle('quit-and-install', () => autoUpdater.quitAndInstall());
 ipcMain.handle('get-version', () => app.getVersion());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'FileLocker_Temp');
+    if (fs.existsSync(tempDir)) {
+      fse.removeSync(tempDir);
+    }
+  } catch (err) {
+    console.error('Failed to clean up temp directory on quit:', err);
+  }
+});
+
+ipcMain.handle('cleanup-temp-vault', async () => {
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'FileLocker_Temp');
+    if (fs.existsSync(tempDir)) {
+      fse.removeSync(tempDir);
+    }
+  } catch (err) {
+    console.error('Failed to clean up temp directory manually:', err);
+  }
 });
 
 // ─── IPC: Select File ─────────────────────────────────────────────────────────
@@ -124,8 +153,17 @@ ipcMain.handle('select-folder', async () => {
 });
 
 // ─── IPC: Select Custom Destination Folder ────────────────────────────────────
+function getDefaultAuroqiPath() {
+  const docsPath = path.join(app.getPath('documents'), 'AUROQI');
+  if (!fs.existsSync(docsPath)) {
+    try { fs.mkdirSync(docsPath, { recursive: true }); } catch (e) {}
+  }
+  return docsPath;
+}
+
 ipcMain.handle('select-dest-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
+    defaultPath: getDefaultAuroqiPath(),
     properties: ['openDirectory', 'createDirectory'],
     title: 'Select Destination Folder'
   });
@@ -192,8 +230,11 @@ ipcMain.handle('get-hardware-id', async () => {
 
 // ─── IPC: Store License Check ───────────────────────────────────────────────────
 ipcMain.handle('check-store-license', async () => {
-  // If not running in MSIX, return direct mode
+  // If not running in MSIX, block access in production, but mock true in dev
   if (!process.windowsStore) {
+    if (process.env.NODE_ENV === 'development') {
+      return { isStoreBuild: true, isActive: true, licenseSource: 'direct-dev' };
+    }
     return { isStoreBuild: false, isActive: false, licenseSource: 'direct' };
   }
 
@@ -225,13 +266,14 @@ ipcMain.handle('check-store-license', async () => {
 });
 
 // ─── IPC: Provision Drive ─────────────────────────────────────────────────────
-ipcMain.handle('provision-drive', async (_event, destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding) => {
-  const send = (percent, label, done = false, error = null, savedPath = null) => {
-    mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath });
+ipcMain.handle('provision-drive', async (_event, destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams) => {
+  const send = (percent, label, done = false, error = null, savedPath = null, secureLinkUrl = null) => {
+    mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath, secureLinkUrl });
   };
 
   // Convert password string to buffer so we can zero it after key derivation
   const passwordBuffer = Buffer.from(password, 'utf8');
+  let activeVaultDir = null;
 
   try {
     // ── 1. Derive Key (Argon2id) ──────────────────────────────────────────────
@@ -301,20 +343,15 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     metaLenBuf.writeUInt32LE(metaBuf.length, 0);
 
     // ── 3. Open vault write stream ────────────────────────────────────────────
-    let destRoot = destination;
-    // If destination is just a drive letter like "C:" or "F:"
-    if (destination.length === 2 && destination[1] === ':') {
-      destRoot = destination + '\\';
-      if (destination.toUpperCase() === 'C:') {
-        destRoot = path.join(app.getPath('desktop'), 'FileLocker_Vaults');
-      }
-    }
-
-    const vaultDir = path.join(destRoot, 'Vault_Data');
-    if (!fs.existsSync(vaultDir)) {
-      fs.mkdirSync(vaultDir, { recursive: true });
-    }
+    const destRoot = destination || app.getPath('temp');
     
+    // We always use a temporary dir for the .vault creation. If destination is passed (Offline Mode),
+    // it's used later for saving the HTML or .vault file.
+    const vaultDirName = 'Vault_Data';
+    const vaultDir = path.join(app.getPath('temp'), 'FileLocker_Temp', Date.now().toString(), vaultDirName);
+    activeVaultDir = vaultDir;
+    fse.ensureDirSync(vaultDir);
+
     const randomId = crypto.randomBytes(4).toString('hex').toUpperCase();
     const vaultFileName = `SecureVault_${randomId}.vault`;
     const vaultPath     = path.join(vaultDir, vaultFileName);
@@ -402,7 +439,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     if (leftover.length > 0) await encryptChunk(leftover);
 
     await new Promise((resolve) => writeStream.end(resolve));
-    // ── 6. Route by vault size: Single-File Mode vs. Drive Mode ─────────────
+    // ── 6. Route by Delivery Method ─────────────────────────────────────────────
     const SINGLE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100 MB
     const isPackaged = app.isPackaged;
     const unlockSrc = isPackaged
@@ -411,7 +448,110 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
 
     const vaultStat = fs.statSync(vaultPath);
 
-    if (vaultStat.size <= SINGLE_FILE_THRESHOLD) {
+    if (secureLinkParams) {
+      // ── Secure Link Mode ────────────────────────────────────────────────────
+      send(93, 'Preparing secure link...');
+      const { net } = require('electron');
+      const apiFetch = net.fetch || fetch;
+      
+      const API_BASE = 'https://api.filelocker.online';
+      
+      const reqHeaders = { 'Content-Type': 'application/json' };
+      if (secureLinkParams.flToken) reqHeaders['Authorization'] = `Bearer ${secureLinkParams.flToken}`;
+      if (secureLinkParams.creatorId) reqHeaders['x-creator-id'] = secureLinkParams.creatorId;
+
+      // Create link record
+      const linkRes = await apiFetch(`${API_BASE}/api/links`, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: JSON.stringify({
+          firm_slug: secureLinkParams.firmSlug,
+          file_size: vaultStat.size,
+          expires_in_days: secureLinkParams.expiresInDays,
+          creator_id: secureLinkParams.creatorId,
+          recipient_message: secureLinkParams.recipientMessage
+        })
+      });
+      
+      if (!linkRes.ok) throw new Error('Failed to create secure link API record');
+      const { link_id, storage_object } = await linkRes.json();
+      
+      // Start multipart upload
+      send(94, 'Initializing upload...');
+      const mpRes = await apiFetch(`${API_BASE}/api/links/${link_id}/multipart`, { 
+        method: 'POST',
+        headers: reqHeaders 
+      });
+      if (!mpRes.ok) throw new Error('Failed to initialize multipart upload');
+      const { uploadId } = await mpRes.json();
+      
+      // Upload parts (10MB chunks)
+      const UPLOAD_CHUNK_SIZE = 10 * 1024 * 1024;
+      const totalParts = Math.ceil(vaultStat.size / UPLOAD_CHUNK_SIZE);
+      const fd = fs.openSync(vaultPath, 'r');
+      let bytesUploaded = 0;
+      let partNumber = 1;
+      const uploadedParts = [];
+      let buffer = Buffer.alloc(UPLOAD_CHUNK_SIZE);
+      
+      const partHeaders = Object.assign({}, reqHeaders);
+      delete partHeaders['Content-Type'];
+
+      while (true) {
+        const bytesRead = fs.readSync(fd, buffer, 0, UPLOAD_CHUNK_SIZE, bytesUploaded);
+        if (bytesRead === 0) break;
+        
+        const chunkToSend = buffer.slice(0, bytesRead);
+        send(94 + Math.floor((bytesUploaded / vaultStat.size) * 5), `Uploading chunk ${partNumber}...`);
+        
+        const partRes = await apiFetch(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/${partNumber}`, {
+          method: 'PUT',
+          headers: partHeaders,
+          body: chunkToSend
+        });
+        
+        if (!partRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
+        const { etag } = await partRes.json();
+        uploadedParts.push({ etag, partNumber });
+        
+        bytesUploaded += bytesRead;
+        partNumber++;
+      }
+      fs.closeSync(fd);
+      
+      // Complete multipart upload
+      send(99, 'Finalizing cloud delivery...');
+      const compRes = await apiFetch(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/complete`, {
+        method: 'POST',
+        headers: reqHeaders,
+        body: JSON.stringify({ parts: uploadedParts })
+      });
+      
+      if (!compRes.ok) throw new Error('Failed to finalize upload');
+      
+      // Delete temporary local vault if it exceeds the single file threshold
+      if (vaultStat.size > SINGLE_FILE_THRESHOLD) {
+        try { fs.unlinkSync(vaultPath); } catch(e) {}
+      }
+      
+      // Success!
+      const slug = secureLinkParams.firmSlug || 'v';
+      const finalUrl = `https://unlock.filelocker.online/${slug}/${link_id}`;
+      
+      // Auto-delete original file if requested
+      if (autoDelete) {
+        send(95, 'Cleaning up original file...');
+        try {
+          if (isFolder) fs.rmSync(sourcePath, { recursive: true, force: true });
+          else fs.unlinkSync(sourcePath);
+        } catch (e) {
+          console.error('Failed to auto-delete original file:', e);
+        }
+      }
+      
+      send(100, 'Link generated successfully.', true, null, vaultPath, finalUrl);
+    } else {
+      if (vaultStat.size <= SINGLE_FILE_THRESHOLD) {
       // ── Single-File Mode ────────────────────────────────────────────────────
       // Embed the entire .vault into the Unlock HTML as a base64 payload.
       // The client receives ONE file: [OriginalName]_Secure.html
@@ -467,9 +607,10 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
 
       send(97, 'Finalizing...');
     }
+    } // End Route by Delivery Method
     
     // ── 7. Auto-delete original file if requested ─────────────────────────────
-    if (autoDelete) {
+    if (autoDelete && !secureLinkParams) {
       send(95, 'Cleaning up original file...');
       try {
         if (isFolder) fs.rmSync(sourcePath, { recursive: true, force: true });
@@ -483,7 +624,66 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
   } catch (err) {
     // Zero the password buffer even on failure
     passwordBuffer.fill(0);
+
+    // Clean up temporary vault directory on failure
+    if (activeVaultDir && fs.existsSync(activeVaultDir)) {
+      try {
+        fs.rmSync(activeVaultDir, { recursive: true, force: true });
+      } catch (cleanupErr) {
+        console.error('Failed to clean up temp vault on error:', cleanupErr);
+      }
+    }
+
     send(0, '', false, err.message);
+  }
+});
+
+// ─── IPC: Save Offline HTML ─────────────────────────────────────────────────────
+ipcMain.handle('save-offline-html', async (event, vaultPath, originalName, hideFileName, defaultSaveLocation) => {
+  try {
+    const destRoot = await dialog.showOpenDialog(mainWindow, {
+      defaultPath: defaultSaveLocation || getDefaultAuroqiPath(),
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select Destination to Save Offline HTML'
+    });
+    if (destRoot.canceled || !destRoot.filePaths.length) return null;
+    const destPath = destRoot.filePaths[0];
+
+    const isPackaged = app.isPackaged;
+    const unlockSrc = isPackaged
+      ? path.join(__dirname, 'Unlock_Vault.html')
+      : path.join(__dirname, '..', 'unlock-app', 'dist', 'index.html');
+
+    if (!fs.existsSync(unlockSrc)) {
+      throw new Error('Unlock app not found. Please build the unlock-app first.');
+    }
+
+    const vaultBytes  = fs.readFileSync(vaultPath);
+    const vaultBase64 = vaultBytes.toString('base64');
+    let htmlTemplate = fs.readFileSync(unlockSrc, 'utf8');
+
+    const injection = `<script id="vault-payload" type="text/plain">${vaultBase64}</script>`;
+    htmlTemplate = htmlTemplate.replace('</body>', `${injection}\n</body>`);
+
+    const baseName = path.basename(originalName, path.extname(originalName));
+    const desiredName = hideFileName ? baseName : `${baseName}_Secure`;
+    let secureHtmlPath = path.join(destPath, `${desiredName}.html`);
+    
+    let counter = 1;
+    while (fs.existsSync(secureHtmlPath)) {
+      secureHtmlPath = path.join(destPath, `${desiredName} (${counter}).html`);
+      counter++;
+    }
+    
+    fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
+    
+    // Clean up temporary vault
+    try { fs.unlinkSync(vaultPath); } catch(e) {}
+
+    return secureHtmlPath;
+  } catch (err) {
+    console.error('Failed to save offline HTML:', err);
+    throw err;
   }
 });
 

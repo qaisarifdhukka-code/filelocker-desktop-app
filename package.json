@@ -48,11 +48,11 @@
     "wait-on": "^9.0.10"
   },
   "build": {
-    "appId": "com.filelocker.app",
-    "productName": "FileLocker",
+    "appId": "com.auroqi.app",
+    "productName": "AUROQI",
     "compression": "maximum",
     "nsis": {
-      "artifactName": "FileLocker-Setup.${ext}"
+      "artifactName": "AUROQI-Setup.${ext}"
     },
     "publish": {
       "provider": "github",
@@ -73,11 +73,11 @@
       "icon": "icon.ico"
     },
     "appx": {
-      "artifactName": "FileLocker-Test.${ext}",
-      "applicationId": "FileLocker",
-      "identityName": "FileLocker",
-      "publisher": "CN=FileLocker",
-      "publisherDisplayName": "FileLocker",
+      "artifactName": "AUROQI-Store.${ext}",
+      "applicationId": "Auroqi",
+      "identityName": "QaisDhukka.Auroqi",
+      "publisher": "CN=4FF1CE90-5FFF-4A94-BA5E-4BE09EF51356",
+      "publisherDisplayName": "Qais Dhukka",
       "setBuildNumber": true
     },
     "mac": {
