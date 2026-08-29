@@ -53,23 +53,10 @@ jobs:
           cd provisioning-app\StoreLicenseChecker
           dotnet publish -c Release -r win-x64 --self-contained true
 
-      - name: Generate Matching Certificate for AppX
-        run: |
-          cd provisioning-app
-          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=4FF1CE90-5FFF-4A94-BA5E-4BE09EF51356" -KeyUsage DigitalSignature -FriendlyName "Auroqi Test Cert" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
-          $password = ConvertTo-SecureString -String "testpassword" -Force -AsPlainText
-          Export-PfxCertificate -Cert $cert -FilePath "test-cert.pfx" -Password $password
-
       - name: Build MSIX (Electron-Builder)
         run: |
           cd provisioning-app
-          # Generates a temporary self-signed cert just to allow electron-builder to finish packaging
-          # Microsoft Store will completely strip this and re-sign with their own EV certificate.
           npx electron-builder --win appx
-        env:
-          # Dummy values to bypass electron-builder strictness. Microsoft replaces these signatures.
-          CSC_LINK: "test-cert.pfx" 
-          CSC_KEY_PASSWORD: "testpassword"
 
       - name: Upload MSIX Artifact
         uses: actions/upload-artifact@v4
