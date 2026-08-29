@@ -15,18 +15,13 @@ namespace StoreLicenseChecker
                 
                 // EXPLICIT PLACEHOLDERS: These must be replaced with the exact Product IDs
                 // from the Microsoft Partner Center AFTER you create the subscription add-ons.
-                string monthlyStoreId = "[PENDING_MONTHLY_ID]";
                 string yearlyStoreId = "9N05JTP77K0F";
                 
                 bool isActive = false;
 
-                // Check if the user has an active entitlement for either subscription
+                // Check if the user has an active entitlement for the yearly subscription
                 var addons = license.AddOnLicenses;
-                if (addons.ContainsKey(monthlyStoreId) && addons[monthlyStoreId].IsActive)
-                {
-                    isActive = true;
-                }
-                else if (addons.ContainsKey(yearlyStoreId) && addons[yearlyStoreId].IsActive)
+                if (addons.ContainsKey(yearlyStoreId) && addons[yearlyStoreId].IsActive)
                 {
                     isActive = true;
                 }
