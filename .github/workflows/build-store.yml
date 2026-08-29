@@ -53,6 +53,14 @@ jobs:
           cd provisioning-app\StoreLicenseChecker
           dotnet publish -c Release -r win-x64 --self-contained true
 
+      - name: Locate Modern Windows SDK SignTool
+        run: |
+          # Find the x64 signtool.exe inside the pre-installed Windows Kits
+          $signtool = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Filter "signtool.exe" -Recurse | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1).FullName
+          echo "Found signtool at: $signtool"
+          # Force electron-builder to use this modern version
+          echo "WIN_SIGNTOOL_PATH=$signtool" >> $env:GITHUB_ENV
+
       - name: Build MSIX (Electron-Builder)
         run: |
           cd provisioning-app
