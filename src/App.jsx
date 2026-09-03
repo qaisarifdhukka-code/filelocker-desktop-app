@@ -34,7 +34,7 @@ export default function App() {
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-[#0F1629] via-transparent to-transparent z-0 opacity-80"></div>
           <div className="relative z-10 flex items-center gap-3">
-            <img src="./AUROQI ICON.png" alt="AUROQI Logo" className="h-[36px] w-auto max-w-[200px] object-contain shrink-0" />
+            <img src="./AUROQITRANSPARENT LOGO.png" alt="AUROQI Logo" className="h-[36px] w-auto max-w-[200px] object-contain shrink-0" />
             <span className="font-['Outfit'] text-[28px] font-bold tracking-tight text-white mt-1">AUROQI</span>
           </div>
         </div>

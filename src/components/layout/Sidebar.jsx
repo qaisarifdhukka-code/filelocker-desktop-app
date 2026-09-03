@@ -22,7 +22,7 @@ export default function Sidebar() {
       <div className={`flex items-center mb-8 h-[28px] ${isSidebarCollapsed ? 'justify-center w-full' : 'justify-between'}`}>
         {!isSidebarCollapsed && (
           <div className="flex items-center gap-2.5">
-            <img src="./AUROQI ICON.png" alt="AUROQI" className="h-[28px] w-auto object-contain shrink-0" />
+            <img src="./AUROQITRANSPARENT LOGO.png" alt="AUROQI" className="h-[28px] w-auto object-contain shrink-0" />
             <span className="font-['Outfit'] text-[21px] font-bold tracking-tight text-gray-900 mt-0.5">
               AUROQI
             </span>
@@ -42,26 +42,26 @@ export default function Sidebar() {
       <div className="flex flex-col gap-1 mb-10 w-full">
         <button 
           onClick={() => setActiveTab('overview')}
-          className={`flex items-center w-full py-2 rounded-lg font-medium text-[13px] transition-colors ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'overview' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+          className={`flex items-center w-full py-2 rounded-lg text-[13px] transition-all duration-200 ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'overview' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
           title={isSidebarCollapsed ? 'Overview' : undefined}
         >
-          <LayoutDashboard size={16} />
+          <LayoutDashboard size={16} className={activeTab === 'overview' ? 'text-indigo-600' : ''} />
           {!isSidebarCollapsed && <span>Overview</span>}
         </button>
         <button 
           onClick={() => setActiveTab('new_delivery')}
-          className={`flex items-center w-full py-2 rounded-lg font-medium text-[13px] transition-colors ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'new_delivery' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+          className={`flex items-center w-full py-2 rounded-lg text-[13px] transition-all duration-200 ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'new_delivery' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
           title={isSidebarCollapsed ? 'New Delivery' : undefined}
         >
-          <Lock size={16} />
+          <Lock size={16} className={activeTab === 'new_delivery' ? 'text-indigo-600' : ''} />
           {!isSidebarCollapsed && <span>New Delivery</span>}
         </button>
         <button 
           onClick={() => setActiveTab('deliveries')}
-          className={`flex items-center w-full py-2 rounded-lg font-medium text-[13px] transition-colors ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'deliveries' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+          className={`flex items-center w-full py-2 rounded-lg text-[13px] transition-all duration-200 ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'deliveries' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
           title={isSidebarCollapsed ? 'Deliveries' : undefined}
         >
-          <HardDrive size={16} />
+          <HardDrive size={16} className={activeTab === 'deliveries' ? 'text-indigo-600' : ''} />
           {!isSidebarCollapsed && <span>Deliveries</span>}
         </button>
         {(!firmName && !logoBase64) && (
@@ -70,10 +70,10 @@ export default function Sidebar() {
               setActiveTab('settings');
               setActiveSettingsTab('branding');
             }}
-            className={`flex items-center w-full py-2 rounded-lg font-medium text-[13px] transition-colors ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'settings' && activeSettingsTab === 'branding' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+            className={`flex items-center w-full py-2 rounded-lg text-[13px] transition-all duration-200 ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'settings' && activeSettingsTab === 'branding' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
             title={isSidebarCollapsed ? 'Branding' : undefined}
           >
-            <Brush size={16} />
+            <Brush size={16} className={activeTab === 'settings' && activeSettingsTab === 'branding' ? 'text-indigo-600' : ''} />
             {!isSidebarCollapsed && <span>Branding</span>}
           </button>
         )}
@@ -89,18 +89,18 @@ export default function Sidebar() {
             setActiveTab('settings');
             setActiveSettingsTab('general');
           }} 
-          className={`flex items-center w-full py-2 rounded-lg transition-colors font-medium text-[13px] group ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'settings' && activeSettingsTab !== 'branding' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+          className={`flex items-center w-full py-2 rounded-lg transition-all duration-200 text-[13px] group ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'settings' && activeSettingsTab !== 'branding' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
           title={isSidebarCollapsed ? 'Settings' : undefined}
         >
-          <Settings className={`w-4 h-4 transition-colors ${activeTab === 'settings' && activeSettingsTab !== 'branding' ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-900'}`} />
+          <Settings className={`w-4 h-4 transition-colors ${activeTab === 'settings' && activeSettingsTab !== 'branding' ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-900'}`} />
           {!isSidebarCollapsed && <span>Settings</span>}
         </button>
         <button 
           onClick={() => setActiveTab('help')} 
-          className={`flex items-center w-full py-2 rounded-lg transition-colors font-medium text-[13px] group ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'help' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+          className={`flex items-center w-full py-2 rounded-lg transition-all duration-200 text-[13px] group ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'help' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
           title={isSidebarCollapsed ? 'Help & Support' : undefined}
         >
-          <LifeBuoy className={`w-4 h-4 transition-colors ${activeTab === 'help' ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-900'}`} />
+          <LifeBuoy className={`w-4 h-4 transition-colors ${activeTab === 'help' ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-900'}`} />
           {!isSidebarCollapsed && <span>Help & Support</span>}
         </button>
       </div>

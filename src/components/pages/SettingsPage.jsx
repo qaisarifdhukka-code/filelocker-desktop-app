@@ -16,6 +16,8 @@ export default function SettingsPage() {
     defaultRecipientMessage, setDefaultRecipientMessage,
     defaultAutoDelete, setDefaultAutoDelete,
     defaultHideFileName, setDefaultHideFileName,
+    emailSubject, setEmailSubject,
+    emailTemplate, setEmailTemplate,
     appVersion, updateStatus, updatePercent, isElectron, licenseTier, hardwareId
   } = useAppContext();
 
@@ -230,6 +232,20 @@ export default function SettingsPage() {
                 <label className="text-[13px] font-bold text-gray-900">Default Recipient Message</label>
                 <textarea rows={3} value={defaultRecipientMessage} onChange={(e) => setDefaultRecipientMessage(e.target.value)} placeholder="Here is the secure document you requested..." className="px-3 py-2 text-[14px] bg-white border border-[#EAEAEA] rounded-[4px] text-gray-900 focus:outline-none focus:border-[#0073bb]" />
               </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[13px] font-bold text-gray-900">Default Email Subject</label>
+                <input type="text" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} placeholder="Secure Document Delivery" className="px-3 py-2 text-[14px] bg-white border border-[#EAEAEA] rounded-[4px] text-gray-900 focus:outline-none focus:border-[#0073bb]" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-[13px] font-bold text-gray-900">Email Body Template</label>
+                <textarea rows={8} value={emailTemplate} onChange={(e) => setEmailTemplate(e.target.value)} placeholder="Write your email body here in plain text..." className="px-3 py-2 text-[13px] font-mono bg-white border border-[#EAEAEA] rounded-[4px] text-gray-900 focus:outline-none focus:border-[#0073bb] leading-relaxed whitespace-pre-wrap" />
+                <p className="text-[12px] text-gray-500 mt-1">
+                  Customize the Outlook draft. Available variables: <br/>
+                  <code className="bg-gray-100 px-1 py-0.5 rounded">{'{{FIRM_NAME}}'}</code>, <code className="bg-gray-100 px-1 py-0.5 rounded">{'{{MESSAGE}}'}</code>, <code className="bg-gray-100 px-1 py-0.5 rounded">{'{{SECURE_LINK}}'}</code>, <code className="bg-gray-100 px-1 py-0.5 rounded">{'{{EXPIRATION}}'}</code>
+                </p>
+              </div>
               
               <div className="flex flex-col gap-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
                 <h3 className="font-bold text-gray-900 text-[13px] mb-1">Privacy & Data Defaults</h3>
@@ -315,7 +331,7 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold text-gray-900 mb-1">About AUROQI</h2>
               <div className="bg-gray-50 rounded-lg p-6 border border-gray-100 flex flex-col items-center justify-center text-center">
                 <div className="flex items-center gap-2 mb-2">
-                  <img src="./AUROQI ICON.png" alt="AUROQI" className="h-8 w-auto shrink-0" />
+                  <img src="./AUROQITRANSPARENT LOGO.png" alt="AUROQI" className="h-8 w-auto shrink-0" />
                   <span className="font-['Outfit'] text-[24px] font-bold tracking-tight text-gray-900 mt-0.5">AUROQI</span>
                 </div>
                 <p className="text-[14px] text-gray-900 font-bold">AUROQI v{appVersion || '1.0.0'}</p>

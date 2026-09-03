@@ -127,6 +127,23 @@ ipcMain.handle('open-external', async (event, url) => {
   await shell.openExternal(url);
 });
 
+ipcMain.handle('open-email-draft', async (event, { to, subject, htmlBody }) => {
+  try {
+    const tempDir = path.join(app.getPath('temp'), 'FileLocker_Drafts');
+    fse.ensureDirSync(tempDir);
+    const emlPath = path.join(tempDir, `draft_${Date.now()}.eml`);
+    
+    const emlContent = `To: ${to || ''}\r\nSubject: ${subject}\r\nX-Unsent: 1\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${htmlBody}`;
+    
+    fs.writeFileSync(emlPath, emlContent, 'utf8');
+    await shell.openPath(emlPath);
+    return true;
+  } catch (err) {
+    console.error('Failed to open email draft:', err);
+    return false;
+  }
+});
+
 ipcMain.handle('select-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
@@ -266,7 +283,7 @@ ipcMain.handle('check-store-license', async () => {
 });
 
 // ─── IPC: Provision Drive ─────────────────────────────────────────────────────
-ipcMain.handle('provision-drive', async (_event, destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams) => {
+ipcMain.handle('provision-drive', async (_event, destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams, viewerConfig) => {
   const send = (percent, label, done = false, error = null, savedPath = null, secureLinkUrl = null) => {
     mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath, secureLinkUrl });
   };
@@ -335,6 +352,10 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     
     if (branding) {
       vaultMeta.branding = branding;
+    }
+
+    if (viewerConfig && viewerConfig.mode === 'secure_view') {
+      vaultMeta.viewerConfig = viewerConfig;
     }
 
     const metaJson  = JSON.stringify(vaultMeta);
@@ -451,17 +472,38 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     if (secureLinkParams) {
       // ── Secure Link Mode ────────────────────────────────────────────────────
       send(93, 'Preparing secure link...');
-      const { net } = require('electron');
-      const apiFetch = net.fetch || fetch;
+      // Bypass Electron's net.fetch (Chromium) to avoid IPC bottlenecks.
+      // We use Node's native Undici fetch to push 10MB chunks directly to the TCP socket.
+      const baseFetch = fetch;
       
-      const API_BASE = 'https://api.filelocker.online';
+      const fetchWithRetry = async (url, options, maxRetries = 5) => {
+        let lastErr;
+        for (let i = 0; i < maxRetries; i++) {
+          try {
+            const res = await baseFetch(url, options);
+            if (!res.ok && res.status >= 500) {
+              throw new Error(`Server error: ${res.status}`);
+            }
+            return res;
+          } catch (err) {
+            lastErr = err;
+            if (i < maxRetries - 1) {
+              console.log(`Retry ${i + 1} for ${url} due to ${err.message}`);
+              await new Promise(r => setTimeout(r, 2000 * Math.pow(2, i))); // 2s, 4s, 8s, 16s... backoff
+            }
+          }
+        }
+        throw lastErr;
+      };
+      
+      const API_BASE = 'https://api.auroqi.com';
       
       const reqHeaders = { 'Content-Type': 'application/json' };
       if (secureLinkParams.flToken) reqHeaders['Authorization'] = `Bearer ${secureLinkParams.flToken}`;
       if (secureLinkParams.creatorId) reqHeaders['x-creator-id'] = secureLinkParams.creatorId;
 
       // Create link record
-      const linkRes = await apiFetch(`${API_BASE}/api/links`, {
+      const linkRes = await fetchWithRetry(`${API_BASE}/api/links`, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify({
@@ -469,7 +511,8 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
           file_size: vaultStat.size,
           expires_in_days: secureLinkParams.expiresInDays,
           creator_id: secureLinkParams.creatorId,
-          recipient_message: secureLinkParams.recipientMessage
+          recipient_message: secureLinkParams.recipientMessage,
+          max_views: secureLinkParams.maxViews
         })
       });
       
@@ -478,7 +521,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       
       // Start multipart upload
       send(94, 'Initializing upload...');
-      const mpRes = await apiFetch(`${API_BASE}/api/links/${link_id}/multipart`, { 
+      const mpRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart`, { 
         method: 'POST',
         headers: reqHeaders 
       });
@@ -490,38 +533,98 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       const totalParts = Math.ceil(vaultStat.size / UPLOAD_CHUNK_SIZE);
       const fd = fs.openSync(vaultPath, 'r');
       let bytesUploaded = 0;
-      let partNumber = 1;
       const uploadedParts = [];
-      let buffer = Buffer.alloc(UPLOAD_CHUNK_SIZE);
       
       const partHeaders = Object.assign({}, reqHeaders);
       delete partHeaders['Content-Type'];
+      
+      const uploadStartTime = Date.now();
+      const maxConcurrent = 5;
+      let nextPartNumber = 1;
+      let nextOffset = 0;
+      let activeUploads = 0;
+      let hasError = false;
+      let globalError = null;
 
-      while (true) {
-        const bytesRead = fs.readSync(fd, buffer, 0, UPLOAD_CHUNK_SIZE, bytesUploaded);
-        if (bytesRead === 0) break;
-        
-        const chunkToSend = buffer.slice(0, bytesRead);
-        send(94 + Math.floor((bytesUploaded / vaultStat.size) * 5), `Uploading chunk ${partNumber}...`);
-        
-        const partRes = await apiFetch(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/${partNumber}`, {
-          method: 'PUT',
-          headers: partHeaders,
-          body: chunkToSend
-        });
-        
-        if (!partRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
-        const { etag } = await partRes.json();
-        uploadedParts.push({ etag, partNumber });
-        
-        bytesUploaded += bytesRead;
-        partNumber++;
-      }
+      await new Promise((resolve, reject) => {
+        const startNext = () => {
+          if (hasError) return;
+          if (nextPartNumber > totalParts && activeUploads === 0) {
+            resolve();
+            return;
+          }
+          while (activeUploads < maxConcurrent && nextPartNumber <= totalParts && !hasError) {
+            const partNumber = nextPartNumber++;
+            const offset = nextOffset;
+            
+            // Allocate fresh buffer per chunk for thread safety
+            const buffer = Buffer.alloc(UPLOAD_CHUNK_SIZE);
+            const bytesRead = fs.readSync(fd, buffer, 0, UPLOAD_CHUNK_SIZE, offset);
+            nextOffset += bytesRead;
+            
+            if (bytesRead === 0) continue;
+            const chunkToSend = buffer.slice(0, bytesRead);
+
+            activeUploads++;
+            
+            (async () => {
+              try {
+                const partRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/${partNumber}`, {
+                  method: 'PUT',
+                  headers: partHeaders,
+                  body: chunkToSend
+                });
+                
+                if (!partRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
+                const { etag } = await partRes.json();
+                uploadedParts.push({ etag, partNumber });
+                
+                bytesUploaded += bytesRead;
+                
+                // Calculate ETA
+                let etaString = '';
+                const elapsedSeconds = (Date.now() - uploadStartTime) / 1000;
+                if (bytesUploaded > 0 && elapsedSeconds > 2) {
+                  const speed = bytesUploaded / elapsedSeconds;
+                  const remainingBytes = vaultStat.size - bytesUploaded;
+                  const remainingSeconds = Math.max(0, Math.round(remainingBytes / speed));
+                  const speedMBps = (speed / 1024 / 1024).toFixed(1);
+                  
+                  if (remainingSeconds < 60) {
+                    etaString = ` (${remainingSeconds}s remaining • ${speedMBps} MB/s)`;
+                  } else {
+                    const m = Math.floor(remainingSeconds / 60);
+                    const s = remainingSeconds % 60;
+                    etaString = ` (~${m}m ${s}s remaining • ${speedMBps} MB/s)`;
+                  }
+                }
+                
+                const percent = Math.round((bytesUploaded / vaultStat.size) * 100);
+                send(94 + Math.floor((bytesUploaded / vaultStat.size) * 5), `Uploading ${percent}% • Chunk ${partNumber} of ${totalParts}${etaString}`);
+                
+                activeUploads--;
+                startNext();
+              } catch (err) {
+                if (!hasError) {
+                  hasError = true;
+                  globalError = err;
+                  reject(err);
+                }
+              }
+            })();
+          }
+        };
+        startNext();
+      });
       fs.closeSync(fd);
+      if (hasError) throw globalError;
+      
+      // Cloudflare requires parts to be sorted sequentially
+      uploadedParts.sort((a, b) => a.partNumber - b.partNumber);
       
       // Complete multipart upload
       send(99, 'Finalizing cloud delivery...');
-      const compRes = await apiFetch(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/complete`, {
+      const compRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/complete`, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify({ parts: uploadedParts })
@@ -536,7 +639,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       
       // Success!
       const slug = secureLinkParams.firmSlug || 'v';
-      const finalUrl = `https://unlock.filelocker.online/${slug}/${link_id}`;
+      const finalUrl = `https://unlock.auroqi.com/${slug}/${link_id}`;
       
       // Auto-delete original file if requested
       if (autoDelete) {
@@ -551,62 +654,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       
       send(100, 'Link generated successfully.', true, null, vaultPath, finalUrl);
     } else {
-      if (vaultStat.size <= SINGLE_FILE_THRESHOLD) {
-      // ── Single-File Mode ────────────────────────────────────────────────────
-      // Embed the entire .vault into the Unlock HTML as a base64 payload.
-      // The client receives ONE file: [OriginalName]_Secure.html
-      send(93, 'Building self-contained HTML file...');
-
-      if (!fs.existsSync(unlockSrc)) {
-        throw new Error('Unlock app not found. Please build the unlock-app first (cd unlock-app && npm run build).');
-      }
-
-      // Read vault bytes → base64
-      const vaultBytes  = fs.readFileSync(vaultPath);
-      const vaultBase64 = vaultBytes.toString('base64');
-
-      // Read the pre-built unlock HTML (fully self-contained via vite-plugin-singlefile)
-      let htmlTemplate = fs.readFileSync(unlockSrc, 'utf8');
-
-      // Inject vault payload as a plain-text script tag just before </body>
-      // type="text/plain" ensures the browser never tries to execute it as JS
-      const injection = `<script id="vault-payload" type="text/plain">${vaultBase64}</script>`;
-      htmlTemplate = htmlTemplate.replace('</body>', `${injection}\n</body>`);
-
-      // Build output filename: "report.pdf" → "report_Secure.html"
-      // If hidden, just use the baseName directly so we don't get "Secure_Data_Secure"
-      const baseName = path.basename(originalName, path.extname(originalName));
-      const desiredName = hideFileName ? baseName : `${baseName}_Secure`;
-      let secureHtmlPath = path.join(destRoot, `${desiredName}.html`);
-      
-      let counter = 1;
-      while (fs.existsSync(secureHtmlPath)) {
-        secureHtmlPath = path.join(destRoot, `${desiredName} (${counter}).html`);
-        counter++;
-      }
-      
-      finalPath = secureHtmlPath;
-      fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
-
-      // Clean up the temporary Vault_Data folder — client only needs the HTML
-      fs.rmSync(vaultDir, { recursive: true, force: true });
-
-      send(97, 'Single-file vault ready...');
-    } else {
-      // ── Drive Mode ──────────────────────────────────────────────────────────
-      // File is too large to embed. Keep the Vault_Data folder and copy the
-      // Unlock_Vault.html to the USB root so the client can select the .vault file.
-      send(93, 'Copying unlock app to drive...');
-      const unlockDest = path.join(destRoot, 'Unlock_Vault.html');
-
-      if (fs.existsSync(unlockSrc)) {
-        fs.copyFileSync(unlockSrc, unlockDest);
-      } else {
-        fs.writeFileSync(unlockDest, generateUnlockPage(), 'utf8');
-      }
-
-      send(97, 'Finalizing...');
-    }
+      send(97, 'Finalizing offline package...');
     } // End Route by Delivery Method
     
     // ── 7. Auto-delete original file if requested ─────────────────────────────
@@ -658,29 +706,60 @@ ipcMain.handle('save-offline-html', async (event, vaultPath, originalName, hideF
       throw new Error('Unlock app not found. Please build the unlock-app first.');
     }
 
-    const vaultBytes  = fs.readFileSync(vaultPath);
-    const vaultBase64 = vaultBytes.toString('base64');
-    let htmlTemplate = fs.readFileSync(unlockSrc, 'utf8');
-
-    const injection = `<script id="vault-payload" type="text/plain">${vaultBase64}</script>`;
-    htmlTemplate = htmlTemplate.replace('</body>', `${injection}\n</body>`);
-
+    const vaultStat = fs.statSync(vaultPath);
     const baseName = path.basename(originalName, path.extname(originalName));
     const desiredName = hideFileName ? baseName : `${baseName}_Secure`;
-    let secureHtmlPath = path.join(destPath, `${desiredName}.html`);
-    
-    let counter = 1;
-    while (fs.existsSync(secureHtmlPath)) {
-      secureHtmlPath = path.join(destPath, `${desiredName} (${counter}).html`);
-      counter++;
+    let returnPath = '';
+
+    if (vaultStat.size <= SINGLE_FILE_THRESHOLD) {
+      // Embed mode
+      const vaultBytes  = fs.readFileSync(vaultPath);
+      const vaultBase64 = vaultBytes.toString('base64');
+      let htmlTemplate = fs.readFileSync(unlockSrc, 'utf8');
+
+      const injection = `<script id="vault-payload" type="text/plain">${vaultBase64}</script>`;
+      htmlTemplate = htmlTemplate.replace('</body>', `${injection}\n</body>`);
+
+      // FIX: Vite 5 adds `crossorigin` to module scripts which breaks `file:///` viewing in Chrome.
+      // We strip it here to ensure the offline HTML file renders properly.
+      htmlTemplate = htmlTemplate.replace('<script type="module" crossorigin>', '<script type="module">');
+
+      let secureHtmlPath = path.join(destPath, `${desiredName}.html`);
+      let counter = 1;
+      while (fs.existsSync(secureHtmlPath)) {
+        secureHtmlPath = path.join(destPath, `${desiredName} (${counter}).html`);
+        counter++;
+      }
+      
+      fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
+      returnPath = secureHtmlPath;
+    } else {
+      // Drive mode: Copy .vault and Unlock_Vault.html
+      let destVaultPath = path.join(destPath, `${desiredName}.vault`);
+      let counter = 1;
+      while (fs.existsSync(destVaultPath)) {
+        destVaultPath = path.join(destPath, `${desiredName} (${counter}).vault`);
+        counter++;
+      }
+      
+      // Move instead of copy to save time and space, since we'll unlink it anyway
+      fs.copyFileSync(vaultPath, destVaultPath);
+      
+      const unlockDest = path.join(destPath, 'Unlock_Vault.html');
+      if (!fs.existsSync(unlockDest)) {
+        if (fs.existsSync(unlockSrc)) {
+          fs.copyFileSync(unlockSrc, unlockDest);
+        } else {
+          fs.writeFileSync(unlockDest, generateUnlockPage(), 'utf8');
+        }
+      }
+      returnPath = destVaultPath;
     }
-    
-    fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
     
     // Clean up temporary vault
     try { fs.unlinkSync(vaultPath); } catch(e) {}
 
-    return secureHtmlPath;
+    return returnPath;
   } catch (err) {
     console.error('Failed to save offline HTML:', err);
     throw err;

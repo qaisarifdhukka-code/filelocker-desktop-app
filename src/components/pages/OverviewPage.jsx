@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../../AppContext';
+import { APP_CONFIG } from '../../config';
 
 function getFormattedSizeParts(bytes) {
   if (!bytes) return { value: '0', unit: 'B' };
@@ -24,7 +25,7 @@ export default function OverviewPage() {
         const headers = { 'Content-Type': 'application/json' };
         if (hardwareId) headers['x-creator-id'] = hardwareId;
 
-        const res = await fetch('https://api.filelocker.online/api/links/dashboard', { headers });
+        const res = await fetch(`${APP_CONFIG.API_URL}/api/links/dashboard`, { headers });
         const data = await res.json();
 
         if (res.ok) {
@@ -44,11 +45,17 @@ export default function OverviewPage() {
     }
   }, [hardwareId]);
 
-  const totalDeliveries = links.length;
   const activeVaults = links.filter(l => l.status === 'active').length;
-  const revokedVaults = links.filter(l => l.status === 'revoked').length;
-  const totalSizeBytes = links.reduce((sum, l) => sum + (l.file_size || 0), 0);
-  const formattedSize = getFormattedSizeParts(totalSizeBytes);
+  const unopenedDeliveries = links.filter(l => l.status === 'active' && !l.last_accessed_at).length;
+  
+  const now = new Date();
+  const next7Days = new Date();
+  next7Days.setDate(now.getDate() + 7);
+  const expiringSoon = links.filter(l => {
+    if (l.status !== 'active' || !l.expires_at) return false;
+    const exp = new Date(l.expires_at);
+    return exp > now && exp <= next7Days;
+  }).length;
   
   const recentLinks = links.slice(0, 5); // Show top 5
 
@@ -67,7 +74,7 @@ export default function OverviewPage() {
           </div>
           <button 
             onClick={() => setActiveTab('new_delivery')}
-            className="flex items-center justify-center gap-2 py-2 px-5 rounded-lg bg-[#18181B] font-medium text-white text-[13px] hover:bg-black focus:outline-none shadow-sm transition-colors"
+            className="flex items-center justify-center gap-2 py-2 px-5 rounded-lg font-medium text-white text-[13px] hover:opacity-90 focus:outline-none shadow-sm transition-all bg-indigo-600 hover:bg-indigo-700"
           >
             <Plus size={16} />
             Create Delivery
@@ -75,26 +82,11 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <div className="p-1.5 bg-gray-50 rounded-md">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-900"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path></svg>
-            </div>
-            <span className="text-[13px] font-medium text-gray-500">Total Deliveries</span>
-          </div>
-          <div className="text-[32px] font-medium text-gray-900 leading-none mb-4">
-            {loading ? <Loader2 className="animate-spin w-6 h-6 text-gray-300" /> : totalDeliveries}
-          </div>
-          <div className="flex items-center gap-1 text-[12px] font-medium text-gray-400">
-            Based on available data
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="p-1.5 bg-gray-50 rounded-md">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-900"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-emerald-500"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
             </div>
             <span className="text-[13px] font-medium text-gray-500">Active Vaults</span>
           </div>
@@ -109,32 +101,30 @@ export default function OverviewPage() {
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <div className="p-1.5 bg-gray-50 rounded-md">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-900"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-amber-500"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/><path d="M12 2v20"/></svg>
             </div>
-            <span className="text-[13px] font-medium text-gray-500">Total Size</span>
+            <span className="text-[13px] font-medium text-gray-500">Unopened Deliveries</span>
           </div>
           <div className="text-[32px] font-medium text-gray-900 leading-none mb-4">
-            {loading ? <Loader2 className="animate-spin w-6 h-6 text-gray-300" /> : (
-              <>{formattedSize.value} <span className="text-[20px] text-gray-500">{formattedSize.unit}</span></>
-            )}
+            {loading ? <Loader2 className="animate-spin w-6 h-6 text-gray-300" /> : unopenedDeliveries}
           </div>
           <div className="flex items-center gap-1 text-[12px] font-medium text-gray-400">
-            Total transfer volume
+            Pending recipient view
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col">
           <div className="flex items-center gap-2 mb-3">
             <div className="p-1.5 bg-gray-50 rounded-md">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-900"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-rose-500"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
-            <span className="text-[13px] font-medium text-gray-500">Revoked</span>
+            <span className="text-[13px] font-medium text-gray-500">Expiring Soon</span>
           </div>
           <div className="text-[32px] font-medium text-gray-900 leading-none mb-4">
-            {loading ? <Loader2 className="animate-spin w-6 h-6 text-gray-300" /> : revokedVaults}
+            {loading ? <Loader2 className="animate-spin w-6 h-6 text-gray-300" /> : expiringSoon}
           </div>
           <div className="flex items-center gap-1 text-[12px] font-medium text-gray-400">
-            Permanently deleted
+            Within the next 7 days
           </div>
         </div>
       </div>

@@ -28,7 +28,10 @@ export function AppProvider({ children }) {
   // Delivery State
   const [deliveryMethod, setDeliveryMethod] = useState('secure_link'); // 'secure_link' | 'offline'
   const [linkExpiration, setLinkExpiration] = useState(Number(localStorage.getItem('wl_defaultLinkExpiration') || '7'));
+  const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientMessage, setRecipientMessage] = useState(localStorage.getItem('wl_defaultRecipientMessage') || '');
+  const [maxViews, setMaxViews] = useState(0); // 0 = unlimited
+  const [viewerConfig, setViewerConfig] = useState({ mode: 'download', allowDownload: true, allowPrint: false, allowCopy: false, customWatermark: '' });
 
 
   // White Label State (Persisted)
@@ -47,6 +50,21 @@ export function AppProvider({ children }) {
   const [defaultRecipientMessage, setDefaultRecipientMessage] = useState(localStorage.getItem('wl_defaultRecipientMessage') || '');
   const [defaultAutoDelete, setDefaultAutoDelete] = useState(localStorage.getItem('wl_defaultAutoDelete') === 'true');
   const [defaultHideFileName, setDefaultHideFileName] = useState(localStorage.getItem('wl_defaultHideFileName') === 'true');
+  const [emailSubject, setEmailSubject] = useState(localStorage.getItem('wl_emailSubject') || 'Secure File Delivery from {{FIRM_NAME}}');
+  const [emailTemplate, setEmailTemplate] = useState(localStorage.getItem('wl_emailTemplate') || 
+`Dear Client,
+
+{{FIRM_NAME}} has securely delivered a document to you.
+
+{{MESSAGE}}
+
+Please click the secure link below to access your files:
+{{SECURE_LINK}}
+
+For your security, this link will automatically expire in {{EXPIRATION}} days.
+
+Thank you,
+{{FIRM_NAME}}`);
   const [activeSettingsTab, setActiveSettingsTab] = useState('general');
 
   // Licensing State
@@ -218,6 +236,8 @@ export function AppProvider({ children }) {
     localStorage.setItem('wl_defaultRecipientMessage', defaultRecipientMessage);
     localStorage.setItem('wl_defaultAutoDelete', defaultAutoDelete.toString());
     localStorage.setItem('wl_defaultHideFileName', defaultHideFileName.toString());
+    localStorage.setItem('wl_emailSubject', emailSubject);
+    localStorage.setItem('wl_emailTemplate', emailTemplate);
     
     showToast('Settings saved successfully', 'success');
   };
@@ -263,7 +283,9 @@ export function AppProvider({ children }) {
     setAutoDelete(defaultAutoDelete);
     setHideFileName(defaultHideFileName);
     setLinkExpiration(Number(defaultLinkExpiration));
+    setRecipientEmail('');
     setRecipientMessage(defaultRecipientMessage);
+    setViewerConfig({ mode: 'download', allowDownload: true, allowPrint: false, allowCopy: false });
     setProgress(0);
     setProgressLabel('');
     setSavedPath('');
@@ -295,7 +317,10 @@ export function AppProvider({ children }) {
     secureLinkUrl, setSecureLinkUrl,
     deliveryMethod, setDeliveryMethod,
     linkExpiration, setLinkExpiration,
+    recipientEmail, setRecipientEmail,
     recipientMessage, setRecipientMessage,
+    maxViews, setMaxViews,
+    viewerConfig, setViewerConfig,
     firmName, setFirmName,
     primaryColor, setPrimaryColor,
     logoBase64, setLogoBase64,
@@ -307,6 +332,8 @@ export function AppProvider({ children }) {
     defaultRecipientMessage, setDefaultRecipientMessage,
     defaultAutoDelete, setDefaultAutoDelete,
     defaultHideFileName, setDefaultHideFileName,
+    emailSubject, setEmailSubject,
+    emailTemplate, setEmailTemplate,
     activeSettingsTab, setActiveSettingsTab,
     licenseTier, setLicenseTier,
     hardwareId, setHardwareId,
