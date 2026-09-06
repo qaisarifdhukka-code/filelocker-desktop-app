@@ -19,7 +19,7 @@ let mainWindow;
 const MAGIC = Buffer.from([0x56, 0x4C, 0x4B, 0x54]); // "VLKT"
 const VERSION = 0x01;
 const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
-const SINGLE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+const SINGLE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -101,7 +101,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   try {
-    const tempDir = path.join(app.getPath('temp'), 'FileLocker_Temp');
+    const tempDir = path.join(app.getPath('temp'), `FileLocker_Temp_${process.pid}`);
     if (fs.existsSync(tempDir)) {
       fse.removeSync(tempDir);
     }
@@ -112,7 +112,7 @@ app.on('will-quit', () => {
 
 ipcMain.handle('cleanup-temp-vault', async () => {
   try {
-    const tempDir = path.join(app.getPath('temp'), 'FileLocker_Temp');
+    const tempDir = path.join(app.getPath('temp'), `FileLocker_Temp_${process.pid}`);
     if (fs.existsSync(tempDir)) {
       fse.removeSync(tempDir);
     }
@@ -283,13 +283,13 @@ ipcMain.handle('check-store-license', async () => {
 });
 
 // ─── IPC: Provision Drive ─────────────────────────────────────────────────────
-ipcMain.handle('provision-drive', async (_event, destination, sourcePath, password, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams, viewerConfig) => {
+ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwordBytes, isFolder, autoDelete, hideFileName, hint, branding, secureLinkParams, viewerConfig) => {
   const send = (percent, label, done = false, error = null, savedPath = null, secureLinkUrl = null) => {
     mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath, secureLinkUrl });
   };
 
-  // Convert password string to buffer so we can zero it after key derivation
-  const passwordBuffer = Buffer.from(password, 'utf8');
+  // Convert password bytes to buffer so we can zero it after key derivation
+  const passwordBuffer = Buffer.from(passwordBytes);
   let activeVaultDir = null;
 
   try {
@@ -300,7 +300,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     // Convert passwordBuffer back to string for hash-wasm (or we can pass string directly)
     // hash-wasm accepts string or Uint8Array for password.
     const keyArray = await argon2id({
-      password: password,
+      password: passwordBuffer,
       salt: salt,
       parallelism: 1,
       iterations: 3,
@@ -369,7 +369,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     // We always use a temporary dir for the .vault creation. If destination is passed (Offline Mode),
     // it's used later for saving the HTML or .vault file.
     const vaultDirName = 'Vault_Data';
-    const vaultDir = path.join(app.getPath('temp'), 'FileLocker_Temp', Date.now().toString(), vaultDirName);
+    const vaultDir = path.join(app.getPath('temp'), `FileLocker_Temp_${process.pid}`, Date.now().toString(), vaultDirName);
     activeVaultDir = vaultDir;
     fse.ensureDirSync(vaultDir);
 
@@ -461,7 +461,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
 
     await new Promise((resolve) => writeStream.end(resolve));
     // ── 6. Route by Delivery Method ─────────────────────────────────────────────
-    const SINGLE_FILE_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+    const SINGLE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50 MB
     const isPackaged = app.isPackaged;
     const unlockSrc = isPackaged
       ? path.join(__dirname, 'Unlock_Vault.html')
@@ -496,7 +496,8 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
         throw lastErr;
       };
       
-      const API_BASE = 'https://api.auroqi.com';
+      const isDev = process.env.NODE_ENV === 'development';
+      const API_BASE = isDev ? 'http://127.0.0.1:8787' : 'https://api.auroqi.com';
       
       const reqHeaders = { 'Content-Type': 'application/json' };
       if (secureLinkParams.flToken) reqHeaders['Authorization'] = `Bearer ${secureLinkParams.flToken}`;

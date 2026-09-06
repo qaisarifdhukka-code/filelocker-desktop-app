@@ -113,10 +113,11 @@ export default function NewDeliveryPage() {
         : viewerConfig;
 
       if (isElectron && window.electronAPI) {
+        const passwordBytes = new TextEncoder().encode(password);
         window.electronAPI.provisionDrive(
           destPath,
           selectedSource.path,
-          password,
+          passwordBytes,
           selectedSource.isFolder,
           autoDelete,
           hideFileName,
