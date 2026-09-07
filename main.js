@@ -173,7 +173,7 @@ ipcMain.handle('select-folder', async () => {
 function getDefaultAuroqiPath() {
   const docsPath = path.join(app.getPath('documents'), 'AUROQI');
   if (!fs.existsSync(docsPath)) {
-    try { fs.mkdirSync(docsPath, { recursive: true }); } catch (e) {}
+    try { fs.mkdirSync(docsPath, { recursive: true }); } catch (e) { }
   }
   return docsPath;
 }
@@ -427,6 +427,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     let bytesProcessed = 0;
     let chunkCounter = 0;
     let leftover = Buffer.alloc(0);
+    const encryptStartTime = Date.now();
 
     const encryptChunk = async (plainChunk) => {
       // Build IV: 8-byte vault nonce + 4-byte counter (big-endian)
@@ -445,7 +446,29 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       bytesProcessed += plainChunk.length;
       const rawPct = totalSize > 0 ? (bytesProcessed / totalSize) * 80 : 50;
       const percent = Math.min(90, Math.round(10 + rawPct));
-      send(percent, `Encrypting... ${Math.round(bytesProcessed / 1024 / 1024)} MB`);
+
+      let etaString = '';
+      if (totalSize > 0) {
+        const elapsedSeconds = (Date.now() - encryptStartTime) / 1000;
+        if (elapsedSeconds > 1) {
+          const speed = bytesProcessed / elapsedSeconds;
+          const remainingBytes = totalSize - bytesProcessed;
+          const remainingSeconds = Math.max(0, Math.round(remainingBytes / speed));
+          const speedMBps = (speed / 1024 / 1024).toFixed(1);
+
+          if (remainingSeconds < 60) {
+            etaString = ` (${remainingSeconds}s remaining • ${speedMBps} MB/s)`;
+          } else {
+            const m = Math.floor(remainingSeconds / 60);
+            const s = remainingSeconds % 60;
+            etaString = ` (~${m}m ${s}s remaining • ${speedMBps} MB/s)`;
+          }
+        }
+      }
+
+      const totalGb = totalSize > 0 ? (totalSize / 1024 / 1024 / 1024).toFixed(2) : '?';
+      const processedGb = (bytesProcessed / 1024 / 1024 / 1024).toFixed(2);
+      send(percent, `Encrypting... ${processedGb} GB / ${totalGb} GB${etaString}`);
     };
 
     // Accumulate data into exactly CHUNK_SIZE pieces before encrypting
@@ -497,8 +520,8 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       };
 
       const isDev = process.env.NODE_ENV === 'development';
-      // const API_BASE = isDev ? 'http://127.0.0.1:8787' : 'https://api.auroqi.com';
-      const API_BASE = 'https://api.auroqi.com';
+      const API_BASE = isDev ? 'http://127.0.0.1:8787' : 'https://api.auroqi.com';
+      // const API_BASE = 'https://api.auroqi.com';
 
       const reqHeaders = { 'Content-Type': 'application/json' };
       if (secureLinkParams.flToken) reqHeaders['Authorization'] = `Bearer ${secureLinkParams.flToken}`;

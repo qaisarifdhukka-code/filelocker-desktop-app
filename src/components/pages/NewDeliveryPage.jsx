@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert, Fingerprint, Lock, CheckCircle2, ChevronRight, X, AlertTriangle, Clock3, Circle, Settings, Loader2, AlertCircle, Link, HardDrive, Copy, Mail, FileText, Folder } from 'lucide-react';
+import { ShieldAlert, Fingerprint, Lock, CheckCircle2, ChevronRight, X, AlertTriangle, Clock3, Circle, Settings, Loader2, AlertCircle, Link, HardDrive, Copy, Mail, FileText, Folder, Eye, EyeOff } from 'lucide-react';
 import { useAppContext, STEPS } from '../../AppContext';
 
 function formatBytes(bytes) {
@@ -78,6 +78,18 @@ export default function NewDeliveryPage() {
     pageTitle = 'Delivery Ready';
     pageDesc = 'Your files are secured.';
   }
+
+  // Prevent accidental close during provisioning
+  React.useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (step === STEPS.PROVISION) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [step]);
 
   const handleContinue = () => {
     if (step === STEPS.SELECT_SOURCE) {
@@ -239,9 +251,9 @@ export default function NewDeliveryPage() {
                   <button onClick={generateStrongPassword} className="text-[13px] font-medium text-blue-600 hover:underline focus:outline-none">Auto-Generate</button>
                 </div>
                 <div className="relative">
-                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={`Min ${minPasswordLength} chars`} className={`${inputClass} pr-12 ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
-                  <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-[11px] text-[12px] font-medium text-gray-500 hover:text-gray-900 uppercase">
-                    {showPassword ? 'Hide' : 'Show'}
+                  <input autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={`Min ${minPasswordLength} chars`} className={`${inputClass} pr-10 ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                  <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-[11px] text-gray-500 hover:text-gray-900 focus:outline-none">
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
                 <div className="flex gap-1.5 items-center mt-2.5">
@@ -255,7 +267,7 @@ export default function NewDeliveryPage() {
 
               <div>
                 <label className={labelClass}>Confirm Password</label>
-                <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Type password again" className={`${inputClass} ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                <input autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false" type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Type password again" className={`${inputClass} ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
               </div>
             </div>
 
@@ -374,6 +386,13 @@ export default function NewDeliveryPage() {
                 <div className="mt-4 text-[12.5px] text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200/60 flex items-start gap-2 shadow-sm">
                   <div className="text-amber-500 mt-0.5 text-base">⚠️</div>
                   <p><strong>Note on Offline Files:</strong> Cloud-only features you selected (such as Link Expiration, Login Requirements, and <strong>Secure View Mode</strong>) are not supported for offline files and will be automatically disabled in the generated package.</p>
+                </div>
+              )}
+              
+              {deliveryMethod === 'secure_link' && selectedSource && selectedSource.size > 5 * 1024 * 1024 * 1024 && (
+                <div className="mt-4 text-[12.5px] text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200/60 flex items-start gap-2 shadow-sm">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <p><strong>Large File Warning:</strong> You are securing a {formatBytes(selectedSource.size)} file for cloud delivery. Upload time will depend entirely on your internet connection speed. Consider using <strong>Offline / USB</strong> for instantaneous local delivery.</p>
                 </div>
               )}
             </div>

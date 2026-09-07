@@ -158,7 +158,7 @@ Thank you,
     }
   }, [loadDrives, isElectron]);
 
-  const generateStrongPassword = () => {
+  const generateStrongPassword = async () => {
     const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
     let p = "";
     for (let i = 0; i < 16; i++) {
@@ -167,6 +167,12 @@ Thank you,
     setPassword(p);
     setConfirmPassword(p);
     setShowPassword(true);
+    try {
+      await navigator.clipboard.writeText(p);
+      showToast('Password copied to clipboard!', 'success');
+    } catch(e) {
+      console.error('Failed to copy password');
+    }
   };
 
   const handleSelectFile = async () => {
