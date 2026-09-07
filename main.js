@@ -132,9 +132,9 @@ ipcMain.handle('open-email-draft', async (event, { to, subject, htmlBody }) => {
     const tempDir = path.join(app.getPath('temp'), 'FileLocker_Drafts');
     fse.ensureDirSync(tempDir);
     const emlPath = path.join(tempDir, `draft_${Date.now()}.eml`);
-    
+
     const emlContent = `To: ${to || ''}\r\nSubject: ${subject}\r\nX-Unsent: 1\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${htmlBody}`;
-    
+
     fs.writeFileSync(emlPath, emlContent, 'utf8');
     await shell.openPath(emlPath);
     return true;
@@ -257,7 +257,7 @@ ipcMain.handle('check-store-license', async () => {
 
   return new Promise((resolve) => {
     // If running in MSIX, run the C# helper to check entitlement
-    const checkerPath = app.isPackaged 
+    const checkerPath = app.isPackaged
       ? path.join(process.resourcesPath, 'StoreLicenseChecker.exe')
       : path.join(__dirname, 'StoreLicenseChecker', 'StoreLicenseChecker.exe');
 
@@ -296,7 +296,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     // ── 1. Derive Key (Argon2id) ──────────────────────────────────────────────
     send(5, 'Deriving encryption key (Argon2id)...');
     const salt = crypto.randomBytes(32);
-    
+
     // Convert passwordBuffer back to string for hash-wasm (or we can pass string directly)
     // hash-wasm accepts string or Uint8Array for password.
     const keyArray = await argon2id({
@@ -319,20 +319,20 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       ? path.basename(sourcePath) + '.zip'
       : path.basename(sourcePath);
     const ext = path.extname(baseOriginalName).toLowerCase();
-    
+
     // Obscure the file name if requested, preserving the original extension
     let originalName = baseOriginalName;
     let encryptedNameHex = undefined;
 
     if (hideFileName) {
       originalName = isFolder ? `Secure_Folder.zip` : `Secure_Data${ext}`;
-      
+
       // Encrypt the true original name so it can be restored on unlock
       const nameIv = crypto.randomBytes(12);
       const nameCipher = crypto.createCipheriv('aes-256-gcm', key, nameIv);
       const encName = Buffer.concat([nameCipher.update(baseOriginalName, 'utf8'), nameCipher.final()]);
       const nameTag = nameCipher.getAuthTag();
-      
+
       // Store IV(12) + TAG(16) + DATA as hex
       encryptedNameHex = Buffer.concat([nameIv, nameTag, encName]).toString('hex');
     }
@@ -345,11 +345,11 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       salt: salt.toString('hex'),
       createdAt: new Date().toISOString(),
     };
-    
+
     if (hint) {
       vaultMeta.hint = hint;
     }
-    
+
     if (branding) {
       vaultMeta.branding = branding;
     }
@@ -358,14 +358,14 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       vaultMeta.viewerConfig = viewerConfig;
     }
 
-    const metaJson  = JSON.stringify(vaultMeta);
-    const metaBuf   = Buffer.from(metaJson, 'utf8');
+    const metaJson = JSON.stringify(vaultMeta);
+    const metaBuf = Buffer.from(metaJson, 'utf8');
     const metaLenBuf = Buffer.alloc(4);
     metaLenBuf.writeUInt32LE(metaBuf.length, 0);
 
     // ── 3. Open vault write stream ────────────────────────────────────────────
     const destRoot = destination || app.getPath('temp');
-    
+
     // We always use a temporary dir for the .vault creation. If destination is passed (Offline Mode),
     // it's used later for saving the HTML or .vault file.
     const vaultDirName = 'Vault_Data';
@@ -375,9 +375,9 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
 
     const randomId = crypto.randomBytes(4).toString('hex').toUpperCase();
     const vaultFileName = `SecureVault_${randomId}.vault`;
-    const vaultPath     = path.join(vaultDir, vaultFileName);
-    let finalPath       = vaultPath;
-    const writeStream   = fs.createWriteStream(vaultPath);
+    const vaultPath = path.join(vaultDir, vaultFileName);
+    let finalPath = vaultPath;
+    const writeStream = fs.createWriteStream(vaultPath);
 
     // Wait for the stream to successfully open, catching any permission/drive errors
     await new Promise((resolve, reject) => {
@@ -425,8 +425,8 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
 
     // ── 5. Chunk → Encrypt → Write loop ──────────────────────────────────────
     let bytesProcessed = 0;
-    let chunkCounter   = 0;
-    let leftover       = Buffer.alloc(0);
+    let chunkCounter = 0;
+    let leftover = Buffer.alloc(0);
 
     const encryptChunk = async (plainChunk) => {
       // Build IV: 8-byte vault nonce + 4-byte counter (big-endian)
@@ -435,9 +435,9 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       iv.writeUInt32BE(chunkCounter, 8);
       chunkCounter++;
 
-      const cipher    = crypto.createCipheriv('aes-256-gcm', key, iv);
+      const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
       const encrypted = Buffer.concat([cipher.update(plainChunk), cipher.final()]);
-      const tag       = cipher.getAuthTag(); // 16 bytes
+      const tag = cipher.getAuthTag(); // 16 bytes
 
       // Write: IV(12) + TAG(16) + DATA
       writeStream.write(Buffer.concat([iv, tag, encrypted]));
@@ -475,7 +475,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       // Bypass Electron's net.fetch (Chromium) to avoid IPC bottlenecks.
       // We use Node's native Undici fetch to push 10MB chunks directly to the TCP socket.
       const baseFetch = fetch;
-      
+
       const fetchWithRetry = async (url, options, maxRetries = 5) => {
         let lastErr;
         for (let i = 0; i < maxRetries; i++) {
@@ -495,10 +495,11 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
         }
         throw lastErr;
       };
-      
+
       const isDev = process.env.NODE_ENV === 'development';
-      const API_BASE = isDev ? 'http://127.0.0.1:8787' : 'https://api.auroqi.com';
-      
+      // const API_BASE = isDev ? 'http://127.0.0.1:8787' : 'https://api.auroqi.com';
+      const API_BASE = 'https://api.auroqi.com';
+
       const reqHeaders = { 'Content-Type': 'application/json' };
       if (secureLinkParams.flToken) reqHeaders['Authorization'] = `Bearer ${secureLinkParams.flToken}`;
       if (secureLinkParams.creatorId) reqHeaders['x-creator-id'] = secureLinkParams.creatorId;
@@ -516,29 +517,29 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
           max_views: secureLinkParams.maxViews
         })
       });
-      
+
       if (!linkRes.ok) throw new Error('Failed to create secure link API record');
       const { link_id, storage_object } = await linkRes.json();
-      
+
       // Start multipart upload
       send(94, 'Initializing upload...');
-      const mpRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart`, { 
+      const mpRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart`, {
         method: 'POST',
-        headers: reqHeaders 
+        headers: reqHeaders
       });
       if (!mpRes.ok) throw new Error('Failed to initialize multipart upload');
       const { uploadId } = await mpRes.json();
-      
+
       // Upload parts (10MB chunks)
       const UPLOAD_CHUNK_SIZE = 10 * 1024 * 1024;
       const totalParts = Math.ceil(vaultStat.size / UPLOAD_CHUNK_SIZE);
       const fd = fs.openSync(vaultPath, 'r');
       let bytesUploaded = 0;
       const uploadedParts = [];
-      
+
       const partHeaders = Object.assign({}, reqHeaders);
       delete partHeaders['Content-Type'];
-      
+
       const uploadStartTime = Date.now();
       const maxConcurrent = 5;
       let nextPartNumber = 1;
@@ -557,17 +558,17 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
           while (activeUploads < maxConcurrent && nextPartNumber <= totalParts && !hasError) {
             const partNumber = nextPartNumber++;
             const offset = nextOffset;
-            
+
             // Allocate fresh buffer per chunk for thread safety
             const buffer = Buffer.alloc(UPLOAD_CHUNK_SIZE);
             const bytesRead = fs.readSync(fd, buffer, 0, UPLOAD_CHUNK_SIZE, offset);
             nextOffset += bytesRead;
-            
+
             if (bytesRead === 0) continue;
             const chunkToSend = buffer.slice(0, bytesRead);
 
             activeUploads++;
-            
+
             (async () => {
               try {
                 const partRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/${partNumber}`, {
@@ -575,13 +576,13 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
                   headers: partHeaders,
                   body: chunkToSend
                 });
-                
+
                 if (!partRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
                 const { etag } = await partRes.json();
                 uploadedParts.push({ etag, partNumber });
-                
+
                 bytesUploaded += bytesRead;
-                
+
                 // Calculate ETA
                 let etaString = '';
                 const elapsedSeconds = (Date.now() - uploadStartTime) / 1000;
@@ -590,7 +591,7 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
                   const remainingBytes = vaultStat.size - bytesUploaded;
                   const remainingSeconds = Math.max(0, Math.round(remainingBytes / speed));
                   const speedMBps = (speed / 1024 / 1024).toFixed(1);
-                  
+
                   if (remainingSeconds < 60) {
                     etaString = ` (${remainingSeconds}s remaining • ${speedMBps} MB/s)`;
                   } else {
@@ -599,10 +600,10 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
                     etaString = ` (~${m}m ${s}s remaining • ${speedMBps} MB/s)`;
                   }
                 }
-                
+
                 const percent = Math.round((bytesUploaded / vaultStat.size) * 100);
                 send(94 + Math.floor((bytesUploaded / vaultStat.size) * 5), `Uploading ${percent}% • Chunk ${partNumber} of ${totalParts}${etaString}`);
-                
+
                 activeUploads--;
                 startNext();
               } catch (err) {
@@ -619,10 +620,10 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
       });
       fs.closeSync(fd);
       if (hasError) throw globalError;
-      
+
       // Cloudflare requires parts to be sorted sequentially
       uploadedParts.sort((a, b) => a.partNumber - b.partNumber);
-      
+
       // Complete multipart upload
       send(99, 'Finalizing cloud delivery...');
       const compRes = await fetchWithRetry(`${API_BASE}/api/links/${link_id}/multipart/${uploadId}/complete`, {
@@ -630,18 +631,18 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
         headers: reqHeaders,
         body: JSON.stringify({ parts: uploadedParts })
       });
-      
+
       if (!compRes.ok) throw new Error('Failed to finalize upload');
-      
+
       // Delete temporary local vault if it exceeds the single file threshold
       if (vaultStat.size > SINGLE_FILE_THRESHOLD) {
-        try { fs.unlinkSync(vaultPath); } catch(e) {}
+        try { fs.unlinkSync(vaultPath); } catch (e) { }
       }
-      
+
       // Success!
       const slug = secureLinkParams.firmSlug || 'v';
       const finalUrl = `https://unlock.auroqi.com/${slug}/${link_id}`;
-      
+
       // Auto-delete original file if requested
       if (autoDelete) {
         send(95, 'Cleaning up original file...');
@@ -652,12 +653,12 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
           console.error('Failed to auto-delete original file:', e);
         }
       }
-      
+
       send(100, 'Link generated successfully.', true, null, vaultPath, finalUrl);
     } else {
       send(97, 'Finalizing offline package...');
     } // End Route by Delivery Method
-    
+
     // ── 7. Auto-delete original file if requested ─────────────────────────────
     if (autoDelete && !secureLinkParams) {
       send(95, 'Cleaning up original file...');
@@ -714,7 +715,7 @@ ipcMain.handle('save-offline-html', async (event, vaultPath, originalName, hideF
 
     if (vaultStat.size <= SINGLE_FILE_THRESHOLD) {
       // Embed mode
-      const vaultBytes  = fs.readFileSync(vaultPath);
+      const vaultBytes = fs.readFileSync(vaultPath);
       const vaultBase64 = vaultBytes.toString('base64');
       let htmlTemplate = fs.readFileSync(unlockSrc, 'utf8');
 
@@ -731,7 +732,7 @@ ipcMain.handle('save-offline-html', async (event, vaultPath, originalName, hideF
         secureHtmlPath = path.join(destPath, `${desiredName} (${counter}).html`);
         counter++;
       }
-      
+
       fs.writeFileSync(secureHtmlPath, htmlTemplate, 'utf8');
       returnPath = secureHtmlPath;
     } else {
@@ -742,10 +743,10 @@ ipcMain.handle('save-offline-html', async (event, vaultPath, originalName, hideF
         destVaultPath = path.join(destPath, `${desiredName} (${counter}).vault`);
         counter++;
       }
-      
+
       // Move instead of copy to save time and space, since we'll unlink it anyway
       fs.copyFileSync(vaultPath, destVaultPath);
-      
+
       const unlockDest = path.join(destPath, 'Unlock_Vault.html');
       if (!fs.existsSync(unlockDest)) {
         if (fs.existsSync(unlockSrc)) {
@@ -756,9 +757,9 @@ ipcMain.handle('save-offline-html', async (event, vaultPath, originalName, hideF
       }
       returnPath = destVaultPath;
     }
-    
+
     // Clean up temporary vault
-    try { fs.unlinkSync(vaultPath); } catch(e) {}
+    try { fs.unlinkSync(vaultPath); } catch (e) { }
 
     return returnPath;
   } catch (err) {
