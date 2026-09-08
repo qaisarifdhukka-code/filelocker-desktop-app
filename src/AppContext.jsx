@@ -29,6 +29,8 @@ export function AppProvider({ children }) {
   const [deliveryMethod, setDeliveryMethod] = useState('secure_link'); // 'secure_link' | 'offline'
   const [linkExpiration, setLinkExpiration] = useState(Number(localStorage.getItem('wl_defaultLinkExpiration') || '7'));
   const [recipientEmail, setRecipientEmail] = useState('');
+  // 'password_only' | 'otp_only' | 'otp_and_password'
+  const [verificationMode, setVerificationMode] = useState('password_only');
   const [recipientMessage, setRecipientMessage] = useState(localStorage.getItem('wl_defaultRecipientMessage') || '');
   const [maxViews, setMaxViews] = useState(0); // 0 = unlimited
   const [viewerConfig, setViewerConfig] = useState({ mode: 'download', allowDownload: true, allowPrint: false, allowCopy: false, customWatermark: '' });
@@ -290,6 +292,7 @@ Thank you,
     setHideFileName(defaultHideFileName);
     setLinkExpiration(Number(defaultLinkExpiration));
     setRecipientEmail('');
+    setVerificationMode('password_only');
     setRecipientMessage(defaultRecipientMessage);
     setViewerConfig({ mode: 'download', allowDownload: true, allowPrint: false, allowCopy: false });
     setProgress(0);
@@ -324,6 +327,7 @@ Thank you,
     deliveryMethod, setDeliveryMethod,
     linkExpiration, setLinkExpiration,
     recipientEmail, setRecipientEmail,
+    verificationMode, setVerificationMode,
     recipientMessage, setRecipientMessage,
     maxViews, setMaxViews,
     viewerConfig, setViewerConfig,

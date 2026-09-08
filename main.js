@@ -288,8 +288,20 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
     mainWindow.webContents.send('provision-progress', { percent, label, done, error, savedPath, secureLinkUrl });
   };
 
-  // Convert password bytes to buffer so we can zero it after key derivation
-  const passwordBuffer = Buffer.from(passwordBytes);
+  // For otp_only mode, passwordBytes is null — we auto-generate a cryptographically secure key
+  const isOtpOnly = secureLinkParams?.verificationMode === 'otp_only';
+  let autoKeyBase64 = null;  // Will hold the base64url auto-key to embed in the URL
+
+  let passwordBuffer;
+  if (isOtpOnly) {
+    // Generate a random 32-byte key and use its base64url encoding as the password
+    const rawKey = crypto.randomBytes(32);
+    autoKeyBase64 = rawKey.toString('base64url'); // URL-safe, no padding issues
+    passwordBuffer = Buffer.from(autoKeyBase64, 'utf8');
+  } else {
+    // Convert password bytes to buffer so we can zero it after key derivation
+    passwordBuffer = Buffer.from(passwordBytes);
+  }
   let activeVaultDir = null;
 
   try {
@@ -537,7 +549,9 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
           expires_in_days: secureLinkParams.expiresInDays,
           creator_id: secureLinkParams.creatorId,
           recipient_message: secureLinkParams.recipientMessage,
-          max_views: secureLinkParams.maxViews
+          max_views: secureLinkParams.maxViews,
+          require_email_otp: secureLinkParams.verificationMode === 'otp_only' || secureLinkParams.verificationMode === 'otp_and_password',
+          recipient_email: secureLinkParams.recipientEmail
         })
       });
 
@@ -664,18 +678,10 @@ ipcMain.handle('provision-drive', async (_event, destination, sourcePath, passwo
 
       // Success!
       const slug = secureLinkParams.firmSlug || 'v';
-      const finalUrl = `https://unlock.auroqi.com/${slug}/${link_id}`;
-
-      // Auto-delete original file if requested
-      if (autoDelete) {
-        send(95, 'Cleaning up original file...');
-        try {
-          if (isFolder) fs.rmSync(sourcePath, { recursive: true, force: true });
-          else fs.unlinkSync(sourcePath);
-        } catch (e) {
-          console.error('Failed to auto-delete original file:', e);
-        }
-      }
+      // For otp_only, append the auto-generated key as a URL hash fragment.
+      // Browsers NEVER send the #fragment to the server, preserving zero-knowledge.
+      const keyFragment = isOtpOnly && autoKeyBase64 ? `#key=${autoKeyBase64}` : '';
+      const finalUrl = `https://unlock.auroqi.com/${slug}/${link_id}${keyFragment}`;
 
       send(100, 'Link generated successfully.', true, null, vaultPath, finalUrl);
     } else {

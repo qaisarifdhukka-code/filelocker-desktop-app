@@ -35,6 +35,7 @@ export default function NewDeliveryPage() {
     linkExpiration, setLinkExpiration,
     maxViews, setMaxViews,
     recipientEmail, setRecipientEmail,
+    verificationMode, setVerificationMode,
     recipientMessage, setRecipientMessage,
     viewerConfig, setViewerConfig,
     emailSubject, emailTemplate,
@@ -95,37 +96,51 @@ export default function NewDeliveryPage() {
     if (step === STEPS.SELECT_SOURCE) {
       setStep(STEPS.SET_PASSWORD);
     } else if (step === STEPS.SET_PASSWORD) {
-      if (password.length < minPasswordLength) {
-        setPasswordError(`Password must be at least ${minPasswordLength} characters.`);
-        return;
+      // OTP-only mode: password is auto-generated, skip all password validation
+      if (verificationMode !== 'otp_only') {
+        if (password.length < minPasswordLength) {
+          setPasswordError(`Password must be at least ${minPasswordLength} characters.`);
+          return;
+        }
+        if (requireSpecialChars && !/[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]+/.test(password)) {
+          setPasswordError('Password must contain at least one special character.');
+          return;
+        }
+        if (password !== confirmPassword) { setPasswordError('Passwords do not match.'); return; }
       }
-      if (requireSpecialChars && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/.test(password)) {
-        setPasswordError('Password must contain at least one special character.');
-        return;
-      }
-      if (password !== confirmPassword) { setPasswordError('Passwords do not match.'); return; }
       setPasswordError('');
-      if (!deliveryMethod) setDeliveryMethod('secure_link'); 
+      if (!deliveryMethod) setDeliveryMethod('secure_link');
       setStep(STEPS.DELIVERY_METHOD);
     } else if (step === STEPS.DELIVERY_METHOD) {
+      const requiresEmail = verificationMode === 'otp_only' || verificationMode === 'otp_and_password';
+      if (deliveryMethod === 'secure_link' && requiresEmail && !recipientEmail.trim()) {
+        setError('Recipient Email is required when Email Verification is enabled.');
+        return;
+      }
+      setError('');
       setStep(STEPS.PROVISION);
       const branding = { firmName, primaryColor, logoBase64 };
       const destPath = null;
-      
+
       const secureParams = deliveryMethod === 'secure_link' ? {
         firmSlug: firmName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
         expiresInDays: linkExpiration,
         creatorId: hardwareId,
         recipientMessage: recipientMessage,
-        maxViews: maxViews || null
+        maxViews: maxViews || null,
+        verificationMode: verificationMode,
+        recipientEmail: recipientEmail
       } : null;
 
-      const effectiveViewerConfig = deliveryMethod === 'offline' 
+      const effectiveViewerConfig = deliveryMethod === 'offline'
         ? { mode: 'download', allowDownload: true, enableWatermark: false }
         : viewerConfig;
 
       if (isElectron && window.electronAPI) {
-        const passwordBytes = new TextEncoder().encode(password);
+        // For otp_only, password is auto-generated in main.js from the verificationMode flag
+        const passwordBytes = verificationMode === 'otp_only'
+          ? null  // main.js will generate automatically
+          : new TextEncoder().encode(password);
         window.electronAPI.provisionDrive(
           destPath,
           selectedSource.path,
@@ -243,38 +258,51 @@ export default function NewDeliveryPage() {
         {step === STEPS.SET_PASSWORD && (
           <div className="flex flex-col gap-6 max-w-[600px]">
             
-            {/* PASSWORD */}
-            <div className="grid grid-cols-2 gap-5">
-              <div>
-                <div className="flex justify-between items-end mb-2">
-                  <label className="block text-[14px] font-medium text-gray-700">Password</label>
-                  <button onClick={generateStrongPassword} className="text-[13px] font-medium text-blue-600 hover:underline focus:outline-none">Auto-Generate</button>
-                </div>
-                <div className="relative">
-                  <input autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={`Min ${minPasswordLength} chars`} className={`${inputClass} pr-10 ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
-                  <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-[11px] text-gray-500 hover:text-gray-900 focus:outline-none">
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-                <div className="flex gap-1.5 items-center mt-2.5">
-                  {[0, 1, 2, 3].map((i) => {
-                    const lit = password.length >= (i + 1) * 2;
-                    const pwdColorClass = pwdStrength === 'Strong' ? 'bg-emerald-500' : pwdStrength === 'Good' ? 'bg-amber-500' : 'bg-red-500';
-                    return <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${lit && password.length > 0 ? pwdColorClass : 'bg-gray-200'}`} />;
-                  })}
+            {/* PASSWORD — hidden for otp_only */}
+            {verificationMode === 'otp_only' ? (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[14px] font-semibold text-blue-800">Auto-Key Mode</p>
+                  <p className="text-[13px] text-blue-600 mt-0.5">A cryptographically secure key will be automatically generated and embedded in the secure link. The recipient does not need to enter a password — they only need to verify their email.</p>
+                  <p className="text-[12px] text-blue-500 mt-1.5">⚠️ Share the full link including the <code className="font-mono bg-blue-100 px-1 rounded">#key=…</code> portion. If it is stripped, the recipient will not be able to open the file.</p>
                 </div>
               </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <div className="flex justify-between items-end mb-2">
+                      <label className="block text-[14px] font-medium text-gray-700">Password</label>
+                      <button onClick={generateStrongPassword} className="text-[13px] font-medium text-blue-600 hover:underline focus:outline-none">Auto-Generate</button>
+                    </div>
+                    <div className="relative">
+                      <input autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={`Min ${minPasswordLength} chars`} className={`${inputClass} pr-10 ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                      <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-[11px] text-gray-500 hover:text-gray-900 focus:outline-none">
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5 items-center mt-2.5">
+                      {[0, 1, 2, 3].map((i) => {
+                        const lit = password.length >= (i + 1) * 2;
+                        const pwdColorClass = pwdStrength === 'Strong' ? 'bg-emerald-500' : pwdStrength === 'Good' ? 'bg-amber-500' : 'bg-red-500';
+                        return <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${lit && password.length > 0 ? pwdColorClass : 'bg-gray-200'}`} />;
+                      })}
+                    </div>
+                  </div>
 
-              <div>
-                <label className={labelClass}>Confirm Password</label>
-                <input autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false" type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Type password again" className={`${inputClass} ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
-              </div>
-            </div>
+                  <div>
+                    <label className={labelClass}>Confirm Password</label>
+                    <input autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false" type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Type password again" className={`${inputClass} ${passwordError ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                  </div>
+                </div>
 
-            <div className="w-1/2 pr-2.5">
-               <label className={labelClass}>Password Hint <span className="text-gray-400 font-normal">(Optional)</span></label>
-               <input type="text" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="e.g. My childhood pet" maxLength={50} className={inputClass} />
-            </div>
+                <div className="w-1/2 pr-2.5">
+                   <label className={labelClass}>Password Hint <span className="text-gray-400 font-normal">(Optional)</span></label>
+                   <input type="text" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="e.g. My childhood pet" maxLength={50} className={inputClass} />
+                </div>
+              </>
+            )}
 
             {(passwordError || error) && (
               <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-[14px] text-red-600 font-medium flex items-center shadow-sm">
@@ -282,6 +310,37 @@ export default function NewDeliveryPage() {
                 {passwordError || error}
               </div>
             )}
+
+            <hr className="border-gray-100 my-2" />
+
+
+            {/* RECIPIENT VERIFICATION */}
+            <div>
+              <label className={labelClass}>Recipient Verification</label>
+              <div className="flex flex-col gap-2.5">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input type="radio" name="recipientVerification" checked={verificationMode === 'password_only'} onChange={() => setVerificationMode('password_only')} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 accent-indigo-600" />
+                  <div>
+                    <span className="text-[14px] text-gray-700 group-hover:text-gray-900 transition-colors font-medium">Password only</span>
+                    <p className="text-[12px] text-gray-400">Recipient enters the file password to unlock.</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input type="radio" name="recipientVerification" checked={verificationMode === 'otp_only'} onChange={() => setVerificationMode('otp_only')} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 accent-indigo-600" />
+                  <div>
+                    <span className="text-[14px] text-gray-700 group-hover:text-gray-900 transition-colors font-medium">Email verification only</span>
+                    <p className="text-[12px] text-gray-400">Recipient verifies email via OTP. No password needed. A secure key is embedded in the link.</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input type="radio" name="recipientVerification" checked={verificationMode === 'otp_and_password'} onChange={() => setVerificationMode('otp_and_password')} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 accent-indigo-600" />
+                  <div>
+                    <span className="text-[14px] text-gray-700 group-hover:text-gray-900 transition-colors font-medium">Email verification + password</span>
+                    <p className="text-[12px] text-gray-400">Strongest option: recipient must verify email AND enter the correct password.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
 
             <hr className="border-gray-100 my-2" />
 
@@ -295,7 +354,6 @@ export default function NewDeliveryPage() {
                     <option value={7}>7 days</option>
                     <option value={30}>30 days</option>
                     <option value={90}>90 days</option>
-                    <option value={3650}>Never</option>
                   </select>
                 </div>
                 <div>
@@ -385,7 +443,7 @@ export default function NewDeliveryPage() {
               {deliveryMethod === 'offline' && (
                 <div className="mt-4 text-[12.5px] text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200/60 flex items-start gap-2 shadow-sm">
                   <div className="text-amber-500 mt-0.5 text-base">⚠️</div>
-                  <p><strong>Note on Offline Files:</strong> Cloud-only features you selected (such as Link Expiration, Login Requirements, and <strong>Secure View Mode</strong>) are not supported for offline files and will be automatically disabled in the generated package.</p>
+                  <p><strong>Note on Offline Files:</strong> Cloud-only features you selected (such as Link Expiration, <strong>Email OTP Verification</strong>, and <strong>Secure View Mode</strong>) are not supported for offline files and will be automatically disabled in the generated package.</p>
                 </div>
               )}
               
@@ -400,8 +458,8 @@ export default function NewDeliveryPage() {
             {deliveryMethod === 'secure_link' && (
               <div className="flex flex-col gap-5">
                 <div>
-                  <label className={labelClass}>Recipient Email <span className="font-normal text-gray-400">(Optional)</span></label>
-                  <input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className={inputClass} />
+                  <label className={labelClass}>Recipient Email {verificationMode === 'otp_only' || verificationMode === 'otp_and_password' ? <span className="text-red-500">*</span> : <span className="font-normal text-gray-400">(Optional)</span>}</label>
+                  <input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className={inputClass} required={verificationMode === 'otp_only' || verificationMode === 'otp_and_password'} />
                 </div>
                 <div>
                   <label className={labelClass}>Message <span className="font-normal text-gray-400">(Optional)</span></label>
@@ -468,7 +526,7 @@ export default function NewDeliveryPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-x-6 gap-y-3 text-[14px] text-gray-600 bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-sm">
-                  <div><span className="font-medium text-gray-900">Expires:</span> {linkExpiration < 3650 ? `${linkExpiration} days` : 'Never'}</div>
+                  <div><span className="font-medium text-gray-900">Expires:</span> {linkExpiration} days</div>
                   <div><span className="font-medium text-gray-900">Accesses:</span> {maxViews === 0 ? 'Unlimited' : maxViews}</div>
                   <div><span className="font-medium text-gray-900">Mode:</span> {viewerConfig.mode === 'secure_view' ? 'Secure Viewer' : 'Download'}</div>
                 </div>
@@ -481,7 +539,7 @@ export default function NewDeliveryPage() {
                     parsedSubject = parsedSubject.replace(/{{FIRM_NAME}}/g, parsedFirm);
                     parsedBody = parsedBody.replace(/{{FIRM_NAME}}/g, parsedFirm);
                     if (recipientMessage) { parsedBody = parsedBody.replace(/{{MESSAGE}}/g, recipientMessage); } else { parsedBody = parsedBody.replace(/[^\n]*{{MESSAGE}}[^\n]*\n?/g, ''); }
-                    const htmlBody = `<div style="font-family: sans-serif; font-size: 14px; color: #333;">${parsedBody.replace(/{{SECURE_LINK}}/g, `<a href="${secureLinkUrl}">${secureLinkUrl}</a>`).replace(/{{EXPIRATION}}/g, linkExpiration < 3650 ? `${linkExpiration}` : 'Never').replace(/\n/g, '<br/>')}</div>`;
+                    const htmlBody = `<div style="font-family: sans-serif; font-size: 14px; color: #333;">${parsedBody.replace(/{{SECURE_LINK}}/g, `<a href="${secureLinkUrl}">${secureLinkUrl}</a>`).replace(/{{EXPIRATION}}/g, `${linkExpiration}`).replace(/\n/g, '<br/>')}</div>`;
                     if (isElectron && window.electronAPI && window.electronAPI.openEmailDraft) { window.electronAPI.openEmailDraft({ to: recipientEmail, subject: parsedSubject, htmlBody }); } else { window.open(`mailto:${recipientEmail}?subject=${encodeURIComponent(parsedSubject)}&body=${encodeURIComponent(htmlBody.replace(/<[^>]+>/g, ''))}`, '_blank'); }
                   }}
                   className="flex items-center justify-center gap-2 py-3 text-[14px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-all"
