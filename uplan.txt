@@ -1,0 +1,1095 @@
+# AUROQI — PHASE-WISE ORGANIZATION & ACCOUNT IMPLEMENTATION PLAN
+
+## OBJECTIVE
+
+Replace the current hardware-ID-based sender identity system with a proper:
+
+- User account system
+- Organization/workspace system
+- Owner + Member roles
+- Login/logout
+- Persistent sessions
+- Multi-device login
+- Active-device management
+- Organization member management
+- Delivery ownership/visibility
+- Organization-level access control
+
+IMPORTANT:
+
+This must be implemented PHASE BY PHASE.
+
+DO NOT attempt to rewrite the entire application at once.
+
+The existing Auroqi functionality is already working and must remain functional throughout this migration.
+
+---
+
+# CRITICAL NON-BREAKING REQUIREMENT
+
+The following existing systems MUST NOT be broken or unnecessarily rewritten:
+
+1. File encryption
+2. AES-256-GCM encryption
+3. Argon2id key derivation used for delivery encryption
+4. 10 MB encryption/chunking system
+5. Cloudflare R2 multipart upload
+6. Cloudflare Worker upload/download logic
+7. Download mode
+8. Secure Viewer mode
+9. Recipient Email OTP verification
+10. Recipient password verification
+11. Link expiration
+12. Access/view limits
+13. Delivery revocation
+14. Offline package creation
+15. Existing delivery data
+16. Existing UI functionality unless changes are required for authentication
+17. Existing recipient JWT/OTP authentication system
+
+The new account authentication system is for the SENDER / AUROQI USER.
+
+The existing recipient verification system is a separate security system and must remain logically separated.
+
+Do not mix sender account sessions with recipient OTP sessions.
+
+---
+
+# PHASE 0 — CODEBASE AUDIT ONLY
+
+Before modifying code:
+
+1. Inspect the complete current authentication/identity flow.
+2. Find every usage of:
+   - hardwareId
+   - creator_id
+   - x-creator-id
+3. Find every API endpoint that currently depends on hardwareId.
+4. Find every delivery query that uses creator_id.
+5. Inspect the current D1 schema.
+6. Inspect the current Electron local storage/session behavior.
+7. Inspect how the current application starts.
+8. Inspect how delivery creation works.
+9. Inspect delivery listing.
+10. Inspect delivery revocation.
+11. Inspect recipient OTP authentication.
+12. Inspect download and secure-viewer authorization.
+
+DO NOT CHANGE CODE IN THIS PHASE.
+
+Create a dependency map showing exactly what needs to change.
+
+The purpose of this phase is to prevent accidentally breaking existing functionality.
+
+---
+
+# PHASE 1 — DATABASE FOUNDATION
+
+Add the new database structures without removing the old hardware-ID fields.
+
+Create:
+
+## organizations
+
+- id
+- name
+- owner_id
+- storage_limit_bytes
+- created_at
+- updated_at
+
+## users
+
+- id
+- email
+- password_hash
+- name
+- created_at
+- updated_at
+- status
+
+## organization_memberships
+
+- user_id
+- organization_id
+- role
+- joined_at
+
+Allowed roles for now:
+
+- owner
+- member
+
+Do NOT add unnecessary roles.
+
+## sessions
+
+- id
+- user_id
+- token_hash
+- device_name
+- platform
+- created_at
+- last_active_at
+- expires_at
+- revoked_at
+
+Use cryptographically random session tokens.
+
+Prefer storing a hash of the session token server-side rather than the raw token.
+
+## invitations
+
+- id
+- organization_id
+- email
+- role
+- token_hash
+- expires_at
+- created_at
+- accepted_at
+
+## secure_links
+
+Add:
+
+- org_id
+- user_id / creator_user_id where appropriate
+
+BUT:
+
+DO NOT immediately delete creator_id/hardware-ID support.
+
+Keep the existing fields temporarily during migration.
+
+The old system must continue functioning while the new identity system is being introduced.
+
+---
+
+# PHASE 2 — AUTHENTICATION BACKEND
+
+Create the new sender authentication namespace:
+
+## POST /api/auth/register
+
+Creates:
+
+1. User
+2. Organization
+3. Owner membership
+4. Initial session
+
+The registering user automatically becomes:
+
+OWNER.
+
+Do not create a separate "admin" role.
+
+The role structure is:
+
+OWNER
+MEMBER
+
+---
+
+## POST /api/auth/login
+
+Input:
+
+- email
+- password
+
+Server:
+
+1. Find user.
+2. Verify password.
+3. Create a new session.
+4. Record:
+   - device name
+   - platform
+   - created_at
+   - last_active_at
+5. Return the session token.
+
+---
+
+## POST /api/auth/logout
+
+Revoke the current session.
+
+Do not delete the user account.
+
+---
+
+## GET /api/auth/me
+
+Return:
+
+- user
+- organization
+- role
+- account information
+
+Example conceptual response:
+
+{
+  user,
+  organization,
+  role
+}
+
+---
+
+## GET /api/auth/sessions
+
+Return the user's active sessions/devices.
+
+Example:
+
+- Windows PC — Chrome/Electron
+- Laptop
+- Mac
+- etc.
+
+The user must be able to see that their account is logged in on multiple devices.
+
+---
+
+## DELETE /api/auth/sessions/:id
+
+Revoke a specific session/device.
+
+The revoked device must lose access on its next authenticated API request.
+
+---
+
+# PHASE 3 — AUTHENTICATION MIDDLEWARE
+
+Create:
+
+getAuthenticatedUser()
+
+Every sender-side protected API request should eventually use this middleware.
+
+Authentication should work like:
+
+Authorization: Bearer SESSION_TOKEN
+
+Server:
+
+1. Extract token.
+2. Hash token.
+3. Find session.
+4. Check revoked_at.
+5. Check expires_at.
+6. Find user.
+7. Find organization membership.
+8. Determine role.
+9. Attach authenticated user/org/role to request context.
+
+If invalid:
+
+401 Unauthorized.
+
+IMPORTANT:
+
+Do NOT use this middleware for recipient OTP sessions.
+
+Recipient authentication must remain separate.
+
+---
+
+# PHASE 4 — ELECTRON LOGIN SYSTEM
+
+Replace the current assumption:
+
+hardware ID = user identity
+
+with:
+
+account session = user identity.
+
+The Electron application should start with:
+
+IF valid session exists:
+    → Open Auroqi
+
+IF no valid session:
+    → Show Login
+
+Create:
+
+- Login page
+- Register page
+- Forgot/reset password flow later if not required for initial launch
+
+The account password is ONLY for logging into Auroqi.
+
+It must NOT become the file encryption password.
+
+The delivery encryption system remains completely separate.
+
+---
+
+# PHASE 5 — SECURE LOCAL SESSION STORAGE
+
+The session token must persist across application restarts.
+
+Preferred:
+
+Electron safeStorage.
+
+Fallback:
+
+Secure application-local storage only if safeStorage is unavailable.
+
+Do NOT store the user's plaintext account password.
+
+The user should be able to:
+
+- close Auroqi
+- reopen Auroqi
+- remain logged in
+
+until the session expires or is revoked.
+
+---
+
+# PHASE 6 — MULTI-DEVICE SUPPORT
+
+A user can log into their Auroqi account from multiple devices.
+
+Example:
+
+Device 1:
+Office PC
+
+Device 2:
+Laptop
+
+Device 3:
+Home PC
+
+Each login creates a separate session.
+
+The account owner/member can see their active devices.
+
+The Owner can revoke user/device sessions according to the authorization model.
+
+Do NOT tie the account permanently to one hardware ID.
+
+This is specifically replacing the current hardware-ID limitation.
+
+---
+
+# PHASE 7 — ORGANIZATION / WORKSPACE
+
+After authentication is working, introduce organization context.
+
+Every account belongs to an organization.
+
+Initial registration:
+
+User
+↓
+Organization
+↓
+Owner membership
+
+Example:
+
+Organization:
+"Smith & Associates"
+
+Owner:
+John Smith
+
+Members:
+Sarah
+Michael
+David
+
+---
+
+# PHASE 8 — OWNER ROLE
+
+OWNER permissions:
+
+- Manage subscription
+- Manage billing
+- Manage organization
+- Invite users
+- Remove users
+- Change member access where applicable
+- Transfer ownership
+- Manage storage
+- View organization settings
+- Manage security policies
+- View organization deliveries
+- Manage their own deliveries
+- Revoke organization deliveries where authorized
+- Manage active user/device sessions
+
+Do not add unnecessary permissions beyond this list for the initial version.
+
+---
+
+# PHASE 9 — MEMBER ROLE
+
+MEMBER is a normal employee/lawyer.
+
+Member can:
+
+- Create deliveries
+- Manage their own deliveries
+- View their own deliveries
+- Revoke their own deliveries
+- View their own activity
+- Manage their own account
+- Manage their own active sessions/devices
+
+Member CANNOT:
+
+- View all organization deliveries
+- Invite users
+- Remove users
+- Transfer ownership
+- Manage organization settings
+- Manage billing
+- Manage organization storage
+- Manage other users
+
+Keep the role model simple:
+
+OWNER
+MEMBER
+
+No additional roles for now.
+
+---
+
+# PHASE 10 — DELIVERY OWNERSHIP MIGRATION
+
+This is one of the most important phases.
+
+Current system:
+
+hardwareId
+    ↓
+creator_id
+    ↓
+delivery
+
+New system:
+
+organization
+    ↓
+user
+    ↓
+delivery
+
+New delivery records should contain:
+
+organization_id
+creator_user_id
+
+Authorization:
+
+OWNER:
+Can see organization deliveries.
+
+MEMBER:
+Can only see deliveries created by that member.
+
+Example:
+
+Organization has:
+
+Sarah → 20 deliveries
+John → 15 deliveries
+Michael → 10 deliveries
+
+OWNER sees:
+
+35/45 organization deliveries.
+
+Sarah sees:
+
+Only her 20 deliveries.
+
+Michael sees:
+
+Only his 10 deliveries.
+
+This authorization must be enforced SERVER-SIDE.
+
+Never rely only on frontend hiding.
+
+---
+
+# PHASE 11 — HARDWARE-ID MIGRATION
+
+Do NOT immediately remove hardware-ID support.
+
+Existing deliveries must remain accessible.
+
+Migration should happen safely.
+
+For existing installations:
+
+hardwareId
+    ↓
+existing deliveries
+
+When the user creates/links their new account:
+
+hardwareId
+    ↓
+verified migration
+    ↓
+new user_id
+    ↓
+new organization_id
+
+Existing deliveries are assigned to the new account/organization.
+
+IMPORTANT:
+
+Do not blindly trust an arbitrary hardwareId supplied by the client.
+
+The migration mechanism must prove that the user is coming from the existing authorized installation.
+
+After migration is confirmed and stable, hardware-ID identity can be deprecated.
+
+DO NOT remove hardware-ID support until migration has been tested successfully.
+
+---
+
+# PHASE 12 — INVITATION SYSTEM
+
+Owner enters:
+
+Member email
+
+Example:
+
+sarah@lawfirm.com
+
+Server creates an invitation.
+
+Sarah receives invitation.
+
+Sarah accepts.
+
+Account is created or linked.
+
+Sarah becomes:
+
+MEMBER
+
+She then logs into Auroqi using her own credentials.
+
+Owner should be able to see:
+
+Team Members
+
+- Sarah
+- John
+- Michael
+
+with:
+
+- Name
+- Email
+- Role
+- Status
+- Joined date
+- Active devices where appropriate
+
+---
+
+# PHASE 13 — TEAM MANAGEMENT UI
+
+Add to Settings:
+
+## Team & Organization
+
+OWNER ONLY.
+
+Sections:
+
+### Organization
+
+- Organization name
+- Owner
+- Storage information
+- Organization settings
+
+### Members
+
+List:
+
+Name
+Email
+Role
+Status
+Joined
+
+Actions:
+
+- Invite
+- Remove
+
+### Invitations
+
+Show:
+
+- Pending invitations
+- Email
+- Role
+- Expiration
+
+---
+
+# PHASE 14 — ACTIVE DEVICES UI
+
+Add:
+
+## Active Devices
+
+Show:
+
+- Device name
+- Platform
+- Last active
+- Login date
+- Current device indicator
+
+Actions:
+
+- Revoke
+
+Example:
+
+Windows PC
+Last active: Today
+[Current device]
+
+MacBook
+Last active: Yesterday
+[Revoke]
+
+This is required because accounts are no longer hardware-locked.
+
+---
+
+# PHASE 15 — FRONTEND AUTHORIZATION
+
+The frontend should receive:
+
+currentUser
+currentOrganization
+currentRole
+
+Use this only for UI behavior.
+
+Example:
+
+OWNER:
+
+Show:
+- Team & Organization
+- Organization settings
+- All organization deliveries
+
+MEMBER:
+
+Hide:
+- Team & Organization
+
+Show:
+- My deliveries
+- My account
+- My devices
+
+IMPORTANT:
+
+Frontend hiding is NOT security.
+
+The backend must independently enforce permissions.
+
+---
+
+# PHASE 16 — STORAGE FOUNDATION
+
+For now:
+
+DO NOT finalize pricing.
+
+DO NOT implement billing-based storage charging.
+
+DO NOT implement overage billing.
+
+Only prepare the architecture.
+
+Storage should eventually belong to the organization:
+
+Organization
+    ↓
+Storage Limit
+    ↓
+Used Storage
+    ↓
+Available Storage
+
+For now create the required database fields and calculations, but leave actual commercial limits/pricing for the later pricing phase.
+
+Do NOT let storage billing changes interfere with delivery functionality.
+
+---
+
+# PHASE 17 — DELIVERY API MIGRATION
+
+Gradually migrate existing sender APIs from:
+
+x-creator-id
+
+to:
+
+Authorization: Bearer SESSION_TOKEN
+
+Examples:
+
+GET /api/links
+POST /api/links
+DELETE /api/links/:id
+etc.
+
+Every protected endpoint should determine:
+
+user
+organization
+role
+
+from the authenticated session.
+
+Do not trust:
+
+creator_id
+organization_id
+hardwareId
+
+directly from the client.
+
+The server must derive authorization context from the authenticated session.
+
+---
+
+# PHASE 18 — RECIPIENT SYSTEM PROTECTION
+
+THIS IS CRITICAL.
+
+Do not modify the existing recipient security architecture unless specifically required.
+
+The recipient flow remains:
+
+Secure Link
+↓
+Recipient email entered
+↓
+Email compared with configured recipient email
+↓
+If correct
+↓
+OTP sent
+↓
+OTP verified
+↓
+Temporary recipient session
+↓
+Password entered
+↓
+Password verified locally
+↓
+Access consumed
+↓
+Encrypted file downloaded/decrypted
+
+The sender's:
+
+- account
+- password
+- organization
+- session
+
+must NEVER become part of this flow.
+
+Recipient OTP authentication and sender account authentication are two separate systems.
+
+---
+
+# PHASE 19 — DOWNLOAD / SECURE VIEWER PROTECTION
+
+Do not rewrite the current download/decryption architecture during account migration.
+
+The account system should only change:
+
+WHO is allowed to manage the delivery.
+
+It should NOT change:
+
+HOW the recipient decrypts the delivery.
+
+Existing:
+
+- Download mode
+- Secure Viewer mode
+- Streaming decryption
+- OPFS
+- AES-GCM
+- Recipient OTP
+- Password verification
+
+must continue working.
+
+---
+
+# PHASE 20 — FULL REGRESSION TEST
+
+After each phase, test existing functionality.
+
+At minimum:
+
+## Existing Delivery
+
+- Create delivery
+- Encrypt file
+- Upload
+- Finalize
+- Generate link
+- Open link
+- OTP
+- Password
+- Download
+- Secure Viewer
+- Revoke
+- Expire
+
+## Account
+
+- Register
+- Login
+- Logout
+- Login again
+- Session expiration
+- Multiple devices
+- Revoke device
+
+## Organization
+
+- Owner creation
+- Invite member
+- Accept invitation
+- Member login
+- Member creates delivery
+- Owner sees member delivery
+- Member cannot see another member's delivery
+- Member cannot access Owner functions
+
+## Migration
+
+- Existing hardware-ID deliveries remain available
+- Existing users can migrate
+- No existing delivery is lost
+- No delivery becomes inaccessible
+- Hardware-ID fallback continues until migration is confirmed
+
+---
+
+# IMPLEMENTATION ORDER
+
+The actual implementation must happen in this exact broad order:
+
+PHASE 0
+Code audit
+
+↓
+
+PHASE 1
+Database foundation
+
+↓
+
+PHASE 2
+Authentication backend
+
+↓
+
+PHASE 3
+Authentication middleware
+
+↓
+
+PHASE 4
+Electron login/register
+
+↓
+
+PHASE 5
+Secure session persistence
+
+↓
+
+PHASE 6
+Multi-device support
+
+↓
+
+PHASE 7
+Organization system
+
+↓
+
+PHASE 8
+Owner permissions
+
+↓
+
+PHASE 9
+Member permissions
+
+↓
+
+PHASE 10
+Delivery ownership model
+
+↓
+
+PHASE 11
+Hardware-ID migration
+
+↓
+
+PHASE 12
+Invitation system
+
+↓
+
+PHASE 13
+Team management UI
+
+↓
+
+PHASE 14
+Active devices UI
+
+↓
+
+PHASE 15
+Frontend authorization
+
+↓
+
+PHASE 16
+Storage foundation
+
+↓
+
+PHASE 17
+Delivery API migration
+
+↓
+
+PHASE 18
+Recipient-system regression testing
+
+↓
+
+PHASE 19
+Download/Secure Viewer regression testing
+
+↓
+
+PHASE 20
+Complete production regression test
+
+---
+
+# ABSOLUTE IMPLEMENTATION RULE
+
+After every phase:
+
+1. Build the application.
+2. Run the existing tests.
+3. Test the affected functionality.
+4. Confirm existing delivery functionality still works.
+5. Only then continue to the next phase.
+
+If a phase causes an existing feature to break:
+
+STOP.
+
+Do not continue building additional phases.
+
+Fix the regression first.
+
+---
+
+# FINAL ARCHITECTURE
+
+The final identity architecture should become:
+
+                    AUROQI
+                       |
+             Authentication
+                       |
+                 User Account
+                       |
+                Organization
+                       |
+             +---------+---------+
+             |                   |
+           OWNER              MEMBER
+             |                   |
+      Organization         Own Deliveries
+       Management          Own Account
+             |
+       All Deliveries
+       Team Management
+       Storage
+
+Delivery security remains separate:
+
+                 DELIVERY
+                    |
+          Client-side Encryption
+                    |
+             AES-256-GCM
+                    |
+              Encrypted Vault
+                    |
+                 R2 Storage
+                    |
+              Secure Link
+                    |
+          Recipient Verification
+                    |
+              Email OTP
+                    |
+               Password
+                    |
+              Local Decryption
+
+The new account/organization architecture controls the SENDER'S access to Auroqi.
+
+The existing encryption architecture controls the SECURITY OF THE FILE.
+
+These two systems must remain separate.
+
+# MOST IMPORTANT REQUIREMENT
+
+The implementation is a migration, NOT a rewrite.
+
+Auroqi's current working system must continue operating while the new organization/account architecture is introduced.
+
+Do not remove hardware-ID support until the new account system, migration path, and regression tests have all been successfully completed.

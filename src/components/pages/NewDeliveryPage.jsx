@@ -52,7 +52,7 @@ export default function NewDeliveryPage() {
   const stepsLayout = [
     { label: 'CONTENT', stepValue: STEPS.SELECT_SOURCE },
     { label: 'SECURITY & ACCESS', stepValue: STEPS.SET_PASSWORD },
-    { label: 'DELIVERY', stepValue: STEPS.DELIVERY_METHOD },
+    { label: 'RECIPIENT', stepValue: STEPS.DELIVERY_METHOD },
     { label: 'DONE', stepValue: STEPS.DONE }
   ];
 
@@ -70,14 +70,14 @@ export default function NewDeliveryPage() {
     pageTitle = 'Security & Access';
     pageDesc = 'Configure encryption and link rules.';
   } else if (step === STEPS.DELIVERY_METHOD) {
-    pageTitle = 'Delivery Options';
-    pageDesc = 'Choose how to deliver the secured files.';
+    pageTitle = 'Recipient Details';
+    pageDesc = 'Configure who receives this secure link.';
   } else if (step === STEPS.PROVISION) {
     pageTitle = 'Securing Files...';
     pageDesc = 'Please do not close the app.';
   } else if (step === STEPS.DONE) {
     pageTitle = 'Delivery Ready';
-    pageDesc = 'Your files are secured.';
+    pageDesc = 'Your files are secured and the link is live.';
   }
 
   // Prevent accidental close during provisioning
@@ -109,20 +109,18 @@ export default function NewDeliveryPage() {
         if (password !== confirmPassword) { setPasswordError('Passwords do not match.'); return; }
       }
       setPasswordError('');
-      if (!deliveryMethod) setDeliveryMethod('secure_link');
       setStep(STEPS.DELIVERY_METHOD);
     } else if (step === STEPS.DELIVERY_METHOD) {
       const requiresEmail = verificationMode === 'otp_only' || verificationMode === 'otp_and_password';
-      if (deliveryMethod === 'secure_link' && requiresEmail && !recipientEmail.trim()) {
+      if (requiresEmail && !recipientEmail.trim()) {
         setError('Recipient Email is required when Email Verification is enabled.');
         return;
       }
       setError('');
       setStep(STEPS.PROVISION);
       const branding = { firmName, primaryColor, logoBase64 };
-      const destPath = null;
 
-      const secureParams = deliveryMethod === 'secure_link' ? {
+      const secureParams = {
         firmSlug: firmName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
         expiresInDays: linkExpiration,
         creatorId: hardwareId,
@@ -130,28 +128,23 @@ export default function NewDeliveryPage() {
         maxViews: maxViews || null,
         verificationMode: verificationMode,
         recipientEmail: recipientEmail
-      } : null;
-
-      const effectiveViewerConfig = deliveryMethod === 'offline'
-        ? { mode: 'download', allowDownload: true, enableWatermark: false }
-        : viewerConfig;
+      };
 
       if (isElectron && window.electronAPI) {
-        // For otp_only, password is auto-generated in main.js from the verificationMode flag
         const passwordBytes = verificationMode === 'otp_only'
-          ? null  // main.js will generate automatically
+          ? null
           : new TextEncoder().encode(password);
         window.electronAPI.provisionDrive(
-          destPath,
+          null,
           selectedSource.path,
           passwordBytes,
           selectedSource.isFolder,
-          autoDelete,
+          false, // autoDelete is always false for online (main.js ignores it anyway)
           hideFileName,
           hint,
           branding,
           secureParams,
-          effectiveViewerConfig
+          viewerConfig
         );
       } else {
         simulateProvisioning();
@@ -238,15 +231,10 @@ export default function NewDeliveryPage() {
                     <button onClick={() => setSelectedSource(null)} className="text-[13px] font-medium text-blue-600 hover:underline ml-4 flex-shrink-0">Change</button>
                   </div>
                 </div>
-
-                <div className="flex flex-col gap-3">
+                <div>
                   <label className="flex items-center gap-3 cursor-pointer group">
                     <input type="checkbox" checked={hideFileName} onChange={(e) => setHideFileName(e.target.checked)} className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 transition-all accent-indigo-600" />
                     <span className="text-[14px] text-gray-800 group-hover:text-gray-900 transition-colors">Hide original file name <span className="text-gray-500">("Secure Data")</span></span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input type="checkbox" checked={autoDelete} onChange={(e) => setAutoDelete(e.target.checked)} className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 transition-all accent-indigo-600" />
-                    <span className="text-[14px] text-gray-800 group-hover:text-gray-900 transition-colors">Auto-delete original file after locking</span>
                   </label>
                 </div>
               </div>
@@ -421,52 +409,23 @@ export default function NewDeliveryPage() {
         {/* ── Step 3: DELIVERY ── */}
         {step === STEPS.DELIVERY_METHOD && (
           <div className="flex flex-col gap-7 max-w-[600px]">
-            <div>
-              <label className={labelClass}>Delivery Method</label>
-              <div className="flex gap-4">
-                <label className={`flex-1 flex items-center gap-3 p-4 border rounded-xl shadow-sm cursor-pointer transition-all ${deliveryMethod === 'secure_link' ? 'bg-indigo-50/50 border-indigo-200 ring-1 ring-indigo-500' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                  <input type="radio" checked={deliveryMethod === 'secure_link'} onChange={() => setDeliveryMethod('secure_link')} className="w-4 h-4 accent-indigo-600" />
-                  <div>
-                    <div className="text-[15px] font-medium text-gray-900 mb-0.5">Secure Link</div>
-                    <div className="text-[13px] text-gray-500">Share via internet</div>
-                  </div>
-                </label>
-                <label className={`flex-1 flex items-center gap-3 p-4 border rounded-xl shadow-sm cursor-pointer transition-all ${deliveryMethod === 'offline' ? 'bg-indigo-50/50 border-indigo-200 ring-1 ring-indigo-500' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                  <input type="radio" checked={deliveryMethod === 'offline'} onChange={() => setDeliveryMethod('offline')} className="w-4 h-4 accent-indigo-600" />
-                  <div>
-                    <div className="text-[15px] font-medium text-gray-900 mb-0.5">Offline / USB</div>
-                    <div className="text-[13px] text-gray-500">Export as files</div>
-                  </div>
-                </label>
-              </div>
-              
-              {deliveryMethod === 'offline' && (
-                <div className="mt-4 text-[12.5px] text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200/60 flex items-start gap-2 shadow-sm">
-                  <div className="text-amber-500 mt-0.5 text-base">⚠️</div>
-                  <p><strong>Note on Offline Files:</strong> Cloud-only features you selected (such as Link Expiration, <strong>Email OTP Verification</strong>, and <strong>Secure View Mode</strong>) are not supported for offline files and will be automatically disabled in the generated package.</p>
-                </div>
-              )}
-              
-              {deliveryMethod === 'secure_link' && selectedSource && selectedSource.size > 5 * 1024 * 1024 * 1024 && (
-                <div className="mt-4 text-[12.5px] text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200/60 flex items-start gap-2 shadow-sm">
-                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                  <p><strong>Large File Warning:</strong> You are securing a {formatBytes(selectedSource.size)} file for cloud delivery. Upload time will depend entirely on your internet connection speed. Consider using <strong>Offline / USB</strong> for instantaneous local delivery.</p>
-                </div>
-              )}
-            </div>
-
-            {deliveryMethod === 'secure_link' && (
-              <div className="flex flex-col gap-5">
-                <div>
-                  <label className={labelClass}>Recipient Email {verificationMode === 'otp_only' || verificationMode === 'otp_and_password' ? <span className="text-red-500">*</span> : <span className="font-normal text-gray-400">(Optional)</span>}</label>
-                  <input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className={inputClass} required={verificationMode === 'otp_only' || verificationMode === 'otp_and_password'} />
-                </div>
-                <div>
-                  <label className={labelClass}>Message <span className="font-normal text-gray-400">(Optional)</span></label>
-                  <textarea value={recipientMessage} onChange={(e) => setRecipientMessage(e.target.value)} className={`${inputClass} h-24 resize-none`} />
-                </div>
+            {selectedSource && selectedSource.size > 5 * 1024 * 1024 * 1024 && (
+              <div className="text-[12.5px] text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200/60 flex items-start gap-2 shadow-sm">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <p><strong>Large File Notice:</strong> You are securing a {formatBytes(selectedSource.size)} file for cloud delivery. Upload speed will depend on your internet connection. For instant local delivery, use <strong>Create Offline Package</strong> instead.</p>
               </div>
             )}
+
+            <div className="flex flex-col gap-5">
+              <div>
+                <label className={labelClass}>Recipient Email {verificationMode === 'otp_only' || verificationMode === 'otp_and_password' ? <span className="text-red-500">*</span> : <span className="font-normal text-gray-400">(Optional)</span>}</label>
+                <input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className={inputClass} required={verificationMode === 'otp_only' || verificationMode === 'otp_and_password'} />
+              </div>
+              <div>
+                <label className={labelClass}>Message <span className="font-normal text-gray-400">(Optional)</span></label>
+                <textarea value={recipientMessage} onChange={(e) => setRecipientMessage(e.target.value)} className={`${inputClass} h-24 resize-none`} />
+              </div>
+            </div>
           </div>
         )}
 
@@ -509,7 +468,7 @@ export default function NewDeliveryPage() {
         {/* ── Step 4: Done ── */}
         {step === STEPS.DONE && (
           <div className="flex flex-col gap-6 max-w-[500px]">
-            {deliveryMethod === 'secure_link' && secureLinkUrl && (
+            {secureLinkUrl && (
               <>
                 <div>
                   <label className={labelClass}>Secure Link</label>
@@ -547,30 +506,6 @@ export default function NewDeliveryPage() {
               </>
             )}
 
-            {((deliveryMethod === 'offline') || (deliveryMethod === 'secure_link' && savedPath)) && (
-              <div className={deliveryMethod === 'secure_link' ? 'pt-4 border-t border-gray-100' : ''}>
-                <label className={labelClass}>Offline Package</label>
-                <div className="text-[12.5px] text-gray-500 mb-3 bg-blue-50/50 p-3 rounded-lg border border-blue-100/50 flex items-start gap-2">
-                  <div className="text-blue-500 mt-0.5">ℹ️</div>
-                  <p><strong>Offline Delivery Info:</strong> For files under 100MB, a self-contained Single-File HTML is generated. For files over 100MB, a Secure HTML file and a separate `.vault` data file are generated side-by-side to ensure the browser doesn't crash during unlocking.</p>
-                </div>
-                {savedPath && !savedPath.includes('FileLocker_Temp') && !savedPath.includes('Temp') && <p className="text-[13px] font-mono break-all text-gray-600 mb-3 select-all bg-gray-50 p-3 rounded-lg border border-gray-200 shadow-sm">{savedPath}</p>}
-                {isElectron && savedPath && savedPath.includes('FileLocker_Temp') && (
-                  <button onClick={async () => {
-                      try {
-                        const destPath = await window.electronAPI.saveOfflineHtml(savedPath, selectedSource.name, hideFileName, defaultSaveLocation);
-                        if (destPath) {
-                          state.setSavedPath(destPath);
-                          state.showToast('Saved offline package successfully!', 'success');
-                        }
-                      } catch (err) { state.showToast('Failed to save offline package', 'error'); }
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-3 text-[14px] font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg shadow-sm transition-all"
-                  ><HardDrive className="w-4 h-4" /> Download Offline Package</button>
-                )}
-              </div>
-            )}
-
             <button onClick={reset} className="mt-4 w-auto self-start px-6 py-2.5 text-[14px] font-medium text-gray-900 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 shadow-sm transition-all">
               Start New Delivery
             </button>
@@ -591,14 +526,13 @@ export default function NewDeliveryPage() {
             onClick={handleContinue}
             disabled={
               (step === STEPS.SELECT_SOURCE && !selectedSource) ||
-              (step === STEPS.SET_PASSWORD && (!password || !confirmPassword)) ||
-              (step === STEPS.SET_PASSWORD && isSecureViewerUnsupported) ||
-              (step === STEPS.DELIVERY_METHOD && !deliveryMethod)
+              (step === STEPS.SET_PASSWORD && verificationMode !== 'otp_only' && (!password || !confirmPassword)) ||
+              (step === STEPS.SET_PASSWORD && isSecureViewerUnsupported)
             }
             title={step === STEPS.SET_PASSWORD && isSecureViewerUnsupported ? 'Selected file format is not supported by Secure Viewer. Switch to Download mode or select a supported file.' : undefined}
             className="flex items-center justify-center min-w-[120px] py-2.5 px-6 rounded-lg font-medium text-white text-[14px] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all bg-indigo-600 hover:bg-indigo-700"
           >
-            {step === STEPS.DELIVERY_METHOD ? 'Secure Delivery' : 'Continue'}
+            {step === STEPS.DELIVERY_METHOD ? 'Secure & Send' : 'Continue'}
           </button>
         </div>
       )}

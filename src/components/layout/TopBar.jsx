@@ -6,7 +6,8 @@ export default function TopBar() {
   const { activeTab, firmName, logoBase64 } = useAppContext();
 
   let pageTitle = 'Overview';
-  if (activeTab === 'new_delivery') pageTitle = 'New Delivery';
+  if (activeTab === 'new_delivery') pageTitle = 'Send Online Link';
+  if (activeTab === 'new_offline_delivery') pageTitle = 'Create Offline Package';
   if (activeTab === 'deliveries') pageTitle = 'Deliveries';
   if (activeTab === 'settings') pageTitle = 'Brand Settings';
 

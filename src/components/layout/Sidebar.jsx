@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, LayoutDashboard, Settings, Loader2, AlertCircle, HardDrive, Brush, LifeBuoy, PanelLeft } from 'lucide-react';
+import { Lock, LayoutDashboard, Settings, Loader2, AlertCircle, HardDrive, Brush, LifeBuoy, PanelLeft, Link, Package } from 'lucide-react';
 import { useAppContext } from '../../AppContext';
 
 export default function Sidebar() {
@@ -51,10 +51,18 @@ export default function Sidebar() {
         <button 
           onClick={() => setActiveTab('new_delivery')}
           className={`flex items-center w-full py-2 rounded-lg text-[13px] transition-all duration-200 ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'new_delivery' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
-          title={isSidebarCollapsed ? 'New Delivery' : undefined}
+          title={isSidebarCollapsed ? 'Send Online Link' : undefined}
         >
-          <Lock size={16} className={activeTab === 'new_delivery' ? 'text-indigo-600' : ''} />
-          {!isSidebarCollapsed && <span>New Delivery</span>}
+          <Link size={16} className={activeTab === 'new_delivery' ? 'text-indigo-600' : ''} />
+          {!isSidebarCollapsed && <span>Send Online Link</span>}
+        </button>
+        <button 
+          onClick={() => setActiveTab('new_offline_delivery')}
+          className={`flex items-center w-full py-2 rounded-lg text-[13px] transition-all duration-200 ${isSidebarCollapsed ? 'justify-center px-0' : 'px-3 gap-3'} ${activeTab === 'new_offline_delivery' ? 'bg-indigo-50 text-indigo-700 font-bold shadow-[0_1px_2px_rgba(0,0,0,0.02)] ring-1 ring-indigo-100/50' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 font-medium'}`}
+          title={isSidebarCollapsed ? 'Create Offline Package' : undefined}
+        >
+          <Package size={16} className={activeTab === 'new_offline_delivery' ? 'text-indigo-600' : ''} />
+          {!isSidebarCollapsed && <span>Create Offline Package</span>}
         </button>
         <button 
           onClick={() => setActiveTab('deliveries')}

@@ -5,7 +5,7 @@ const AppContext = createContext();
 export const STEPS = { SELECT_SOURCE: 0, SET_PASSWORD: 1, DELIVERY_METHOD: 2, PROVISION: 3, DONE: 4 };
 
 export function AppProvider({ children }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'new_delivery' | 'deliveries'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'new_delivery' | 'new_offline_delivery' | 'deliveries' | 'settings' | 'help'
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [toast, setToast] = useState(null);
 

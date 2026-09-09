@@ -7,6 +7,7 @@ import { useAppContext } from './AppContext';
 import AppShell from './components/layout/AppShell';
 import OverviewPage from './components/pages/OverviewPage';
 import NewDeliveryPage from './components/pages/NewDeliveryPage';
+import NewOfflineDeliveryPage from './components/pages/NewOfflineDeliveryPage';
 import DeliveriesPage from './components/pages/DeliveriesPage';
 import SettingsPage from './components/pages/SettingsPage';
 import HelpPage from './components/pages/HelpPage';
@@ -61,6 +62,7 @@ export default function App() {
       <div key={activeTab} className="animate-fade-slide-up h-full w-full">
         {activeTab === 'overview' && <OverviewPage />}
         {activeTab === 'new_delivery' && <NewDeliveryPage />}
+        {activeTab === 'new_offline_delivery' && <NewOfflineDeliveryPage />}
         {activeTab === 'deliveries' && <DeliveriesPage />}
         {activeTab === 'settings' && <SettingsPage />}
         {activeTab === 'help' && <HelpPage />}
